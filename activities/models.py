@@ -1,0 +1,192 @@
+import re
+from django.db import models
+from django.core.exceptions import ValidationError
+
+
+# Titels die we bij import automatisch als ruis markeren
+NOISE_TITLES = {
+    "idle",
+    "program manager",
+    "task switching",
+    "desktop",
+    "untitled",
+    "notepad",          # lege notepad zonder bestandsnaam
+}
+
+# Applicatienamen die we nooit willen zien in de UI
+NOISE_APPS = {
+    "program manager",
+    "task switching",
+}
+
+
+def extract_app_name(raw_title: str) -> str:
+    """
+    Extraheert de applicatienaam uit een AHK-venstertitel.
+
+    AHK schrijft titels als:  "Documentnaam - Applicatienaam"
+    of:                        "Paginatitel — Mozilla Firefox"
+    of:                        "Applicatienaam" (geen scheidingsteken)
+
+    We pakken het deel ná het laatste " - " of " — ".
+    """
+    for sep in (" — ", " - "):
+        if sep in raw_title:
+            return raw_title.rsplit(sep, 1)[-1].strip()
+    return raw_title.strip()
+
+
+def detect_noise(raw_title: str) -> bool:
+    """
+    Geeft True als deze activiteit als ruis beschouwd moet worden.
+    Ruis verschijnt standaard niet in de UI maar wordt niet verwijderd.
+    """
+    lower = raw_title.strip().lower()
+    if lower in NOISE_TITLES:
+        return True
+    app = extract_app_name(raw_title).lower()
+    if app in NOISE_APPS:
+        return True
+    return False
+
+
+class WindowActivity(models.Model):
+    """
+    Eén regel uit het AHK-logbestand.
+    Wordt bij import aangemaakt en daarna niet meer gewijzigd,
+    behalve de velden is_noise en (indirect) de mappings.
+    """
+
+    started_at = models.DateTimeField(db_index=True)
+    ended_at = models.DateTimeField()
+    duration_seconds = models.PositiveIntegerField()
+
+    raw_title = models.TextField(
+        help_text="Originele venstertitel zoals AHK die heeft vastgelegd."
+    )
+    app_name = models.CharField(
+        max_length=255,
+        db_index=True,
+        help_text="Geëxtraheerde applicatienaam (deel na het laatste ' - ').",
+    )
+
+    # Datum als apart veld zodat je snel op dag kunt filteren/groeperen
+    date = models.DateField(db_index=True)
+
+    is_noise = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text=(
+            "Automatisch True voor Idle, Program Manager, Task Switching, etc. "
+            "Kan handmatig worden omgezet. Ruisregels zijn verborgen in de UI."
+        ),
+    )
+
+    class Meta:
+        ordering = ["started_at"]
+        verbose_name = "vensteractiteit"
+        verbose_name_plural = "vensteractiviteiten"
+
+    def __str__(self):
+        return f"{self.started_at:%Y-%m-%d %H:%M} | {self.app_name} | {self.raw_title[:60]}"
+
+    @classmethod
+    def from_log_line(cls, started_at, ended_at, raw_title):
+        """
+        Factory-methode: maak een (nog niet opgeslagen) instantie
+        op basis van de geparseerde velden uit het logbestand.
+        Vult app_name, date en is_noise automatisch in.
+        """
+        duration = int((ended_at - started_at).total_seconds())
+        return cls(
+            started_at=started_at,
+            ended_at=ended_at,
+            duration_seconds=max(duration, 0),
+            raw_title=raw_title,
+            app_name=extract_app_name(raw_title),
+            date=started_at.date(),
+            is_noise=detect_noise(raw_title),
+        )
+
+
+class ActivityRule(models.Model):
+    """
+    Een automatische koppelregel: als een WindowActivity aan het patroon
+    voldoet, wordt hij aan het opgegeven project gekoppeld.
+
+    match_field bepaalt wát we controleren; match_value is het patroon.
+
+    Uitbreiden naar regex: voeg 'title_regex' en 'app_regex' toe aan
+    MATCH_FIELD_CHOICES. De apply()-methode hoeft dan alleen een extra
+    elif-tak te krijgen — geen migraties nodig aan bestaande data.
+    """
+
+    MATCH_FIELD_CHOICES = [
+        ("app_name", "Applicatienaam (exact, hoofdletterongevoelig)"),
+        ("title_contains", "Venstertitel bevat tekst (hoofdletterongevoelig)"),
+        # Toekomstige opties — oncommentarieer en migreer wanneer nodig:
+        # ("title_regex",  "Venstertitel (reguliere expressie)"),
+        # ("app_regex",    "Applicatienaam (reguliere expressie)"),
+    ]
+
+    project = models.ForeignKey(
+        "projects.Project",
+        on_delete=models.CASCADE,
+        related_name="rules",
+    )
+    match_field = models.CharField(max_length=30, choices=MATCH_FIELD_CHOICES)
+    match_value = models.CharField(
+        max_length=255,
+        help_text="Waarde om op te matchen (hoofdletterongevoelig).",
+    )
+    priority = models.PositiveSmallIntegerField(
+        default=10,
+        help_text=(
+            "Lagere waarde = hogere prioriteit. "
+            "Bij meerdere matchende regels wint de laagste priority-waarde."
+        ),
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["priority", "id"]
+        verbose_name = "activiteitsregel"
+        verbose_name_plural = "activiteitsregels"
+
+    def __str__(self):
+        return (
+            f"[prio {self.priority}] {self.get_match_field_display()} "
+            f"= '{self.match_value}' → {self.project.name}"
+        )
+
+    def clean(self):
+        """Valideer het patroon op het moment dat de regel wordt opgeslagen."""
+        if self.match_field in ("title_regex", "app_regex"):
+            try:
+                re.compile(self.match_value)
+            except re.error as exc:
+                raise ValidationError(
+                    {"match_value": f"Ongeldige reguliere expressie: {exc}"}
+                )
+
+    def apply(self, activity: WindowActivity) -> bool:
+        """
+        Geeft True als deze regel van toepassing is op de gegeven activiteit.
+        Voeg hier toekomstige match_field-typen toe als extra elif-tak.
+        """
+        val = self.match_value.lower()
+
+        if self.match_field == "app_name":
+            return activity.app_name.lower() == val
+
+        if self.match_field == "title_contains":
+            return val in activity.raw_title.lower()
+
+        # Toekomstige regex-opties:
+        # if self.match_field == "title_regex":
+        #     return bool(re.search(self.match_value, activity.raw_title, re.IGNORECASE))
+        # if self.match_field == "app_regex":
+        #     return bool(re.search(self.match_value, activity.app_name, re.IGNORECASE))
+
+        return False

@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Django
+db.sqlite3
+*.log
+/static/
+/media/
+
+# Omgevingsvariabelen
+.env
+local_settings.py
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vue / Node (voor later)
+node_modules/
+dist/
+.env.local

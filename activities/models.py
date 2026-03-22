@@ -84,6 +84,7 @@ class WindowActivity(models.Model):
 
     class Meta:
         ordering = ["started_at"]
+        unique_together = [("started_at", "raw_title")]
         verbose_name = "vensteractiteit"
         verbose_name_plural = "vensteractiviteiten"
 

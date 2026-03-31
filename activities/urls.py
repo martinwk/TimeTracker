@@ -1,7 +1,20 @@
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import (
+    ImportAhkLogView,
+    WindowActivityViewSet,
+    ActivityBlockViewSet,
+    UniqueActivityViewSet,
+    ActivityRuleViewSet,
+)
 
-from .views import ImportAhkLogView
+router = DefaultRouter()
+router.register(r"window-activities", WindowActivityViewSet, basename="window-activity")
+router.register(r"activity-blocks", ActivityBlockViewSet, basename="activity-block")
+router.register(r"unique-activities", UniqueActivityViewSet, basename="unique-activity")
+router.register(r"activity-rules", ActivityRuleViewSet, basename="activity-rule")
 
 urlpatterns = [
+    path("", include(router.urls)),
     path("activities/import/", ImportAhkLogView.as_view(), name="import-ahk-log"),
 ]

@@ -120,7 +120,7 @@ class ActivityMapping(models.Model):
         unique_together = [("activity", "time_entry")]
         ordering = ["activity__started_at"]
         verbose_name = "activiteitskoppeling"
-        verbose_name_plural = "activiteitskoppelingen"
+        verbose_name_plural = "activiteitsoppelingen"
 
     def __str__(self):
         return (

@@ -9,20 +9,12 @@ class TimeEntryInline(admin.TabularInline):
     ordering = ["-date"]
 
 
-class ActivityRuleInline(admin.TabularInline):
-    # Importeer vanuit activities om circulaire imports te vermijden
-    from activities.models import ActivityRule
-    model = ActivityRule
-    extra = 1
-    fields = ["priority", "match_field", "match_value", "is_active"]
-
-
 @admin.register(Project)
 class ProjectAdmin(admin.ModelAdmin):
     list_display = ["name", "color", "is_active", "created_at"]
     list_filter = ["is_active"]
     list_editable = ["is_active"]
-    inlines = [ActivityRuleInline, TimeEntryInline]
+    inlines = [TimeEntryInline]
 
 
 @admin.register(TimeEntry)

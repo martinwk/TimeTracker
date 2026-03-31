@@ -1,19 +1,18 @@
 import re
-from django.db import models
+
 from django.core.exceptions import ValidationError
+from django.db import models
 
 
-# Titels die we bij import automatisch als ruis markeren
 NOISE_TITLES = {
     "idle",
     "program manager",
     "task switching",
     "desktop",
     "untitled",
-    "notepad",          # lege notepad zonder bestandsnaam
+    "notepad",
 }
 
-# Applicatienamen die we nooit willen zien in de UI
 NOISE_APPS = {
     "program manager",
     "task switching",
@@ -54,13 +53,15 @@ class WindowActivity(models.Model):
     """
     Eén regel uit het AHK-logbestand.
     Wordt bij import aangemaakt en daarna niet meer gewijzigd,
-    behalve de velden is_noise en (indirect) de mappings.
+    behalve het veld is_noise.
+
+    Na aggregatie verwijst unique_activity terug naar de UniqueActivity
+    waar deze regel toe behoort. Null zolang nog niet geaggregeerd.
     """
 
     started_at = models.DateTimeField(db_index=True)
     ended_at = models.DateTimeField()
     duration_seconds = models.PositiveIntegerField()
-
     raw_title = models.TextField(
         help_text="Originele venstertitel zoals AHK die heeft vastgelegd."
     )
@@ -69,10 +70,7 @@ class WindowActivity(models.Model):
         db_index=True,
         help_text="Geëxtraheerde applicatienaam (deel na het laatste ' - ').",
     )
-
-    # Datum als apart veld zodat je snel op dag kunt filteren/groeperen
     date = models.DateField(db_index=True)
-
     is_noise = models.BooleanField(
         default=False,
         db_index=True,
@@ -81,11 +79,18 @@ class WindowActivity(models.Model):
             "Kan handmatig worden omgezet. Ruisregels zijn verborgen in de UI."
         ),
     )
+    unique_activity = models.ForeignKey(
+        "UniqueActivity",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="occurrences",
+        help_text="De UniqueActivity waar deze regel na aggregatie toe behoort.",
+    )
 
     class Meta:
         ordering = ["started_at"]
-        unique_together = [("started_at", "raw_title")]
-        verbose_name = "vensteractiteit"
+        verbose_name = "vensteractiviteit"
         verbose_name_plural = "vensteractiviteiten"
 
     def __str__(self):
@@ -110,6 +115,102 @@ class WindowActivity(models.Model):
         )
 
 
+class ActivityBlock(models.Model):
+    """
+    Geaggregeerde weergave van WindowActivity-regels binnen een tijdvenster.
+
+    Meerdere korte activiteiten van dezelfde app binnen `block_minutes`
+    minuten worden samengevoegd tot één blok.
+
+    De unieke titels binnen een blok zijn beschikbaar via:
+        block.unique_activities.all()
+
+    De dominant_title kan achteraf worden bepaald via:
+        block.unique_activities.order_by('-total_seconds').first().raw_title
+
+    Wordt aangemaakt door: python manage.py aggregate_activities
+    Kan opnieuw worden gegenereerd zonder dataverlies — de ruwe
+    WindowActivity records blijven altijd intact.
+    """
+
+    app_name = models.CharField(max_length=255, db_index=True)
+    date = models.DateField(db_index=True)
+    started_at = models.DateTimeField(db_index=True)
+    ended_at = models.DateTimeField()
+    total_seconds = models.PositiveIntegerField(
+        help_text="Opgetelde actieve seconden van alle onderliggende WindowActivity-regels."
+    )
+    activity_count = models.PositiveIntegerField(
+        help_text="Aantal WindowActivity-regels samengevoegd in dit blok."
+    )
+    block_minutes = models.PositiveSmallIntegerField(
+        help_text="Tijdvenster in minuten waarbinnen activiteiten zijn samengevoegd."
+    )
+
+    class Meta:
+        ordering = ["started_at"]
+        verbose_name = "activiteitsblok"
+        verbose_name_plural = "activiteitsblokken"
+
+    def __str__(self):
+        minutes, seconds = divmod(self.total_seconds, 60)
+        return (
+            f"{self.started_at:%Y-%m-%d %H:%M} | {self.app_name} | "
+            f"{minutes}m {seconds:02d}s | {self.activity_count} activiteiten"
+        )
+
+    @property
+    def total_minutes(self):
+        return round(self.total_seconds / 60, 1)
+
+    @property
+    def dominant_title(self):
+        """De titel met de meeste cumulatieve seconden in dit blok."""
+        ua = self.unique_activities.first()
+        return ua.raw_title if ua else None
+
+
+class UniqueActivity(models.Model):
+    """
+    Eén unieke venstertitel binnen een ActivityBlock, met de cumulatieve
+    tijd dat die titel actief was in het blok.
+
+    Relaties:
+        block       → het ActivityBlock waar deze titel toe behoort
+        occurrences → de individuele WindowActivity-regels met deze titel
+                      (via FK op WindowActivity, één activiteit hoort
+                       maar bij één UniqueActivity)
+
+    De cumulatieve tijd (total_seconds) is de som van duration_seconds
+    van alle gekoppelde WindowActivity-regels.
+    """
+
+    block = models.ForeignKey(
+        ActivityBlock,
+        on_delete=models.CASCADE,
+        related_name="unique_activities",
+    )
+    raw_title = models.TextField(
+        help_text="De venstertitel waarop gegroepeerd is."
+    )
+    total_seconds = models.PositiveIntegerField(
+        help_text="Cumulatieve actieve tijd voor deze titel binnen het blok."
+    )
+
+    class Meta:
+        ordering = ["-total_seconds"]
+        verbose_name = "unieke activiteit"
+        verbose_name_plural = "unieke activiteiten"
+
+    def __str__(self):
+        minutes, seconds = divmod(self.total_seconds, 60)
+        return f"{minutes}m {seconds:02d}s | {self.raw_title[:80]}"
+
+    @property
+    def total_minutes(self):
+        return round(self.total_seconds / 60, 1)
+
+
 class ActivityRule(models.Model):
     """
     Een automatische koppelregel: als een WindowActivity aan het patroon
@@ -126,8 +227,8 @@ class ActivityRule(models.Model):
         ("app_name", "Applicatienaam (exact, hoofdletterongevoelig)"),
         ("title_contains", "Venstertitel bevat tekst (hoofdletterongevoelig)"),
         # Toekomstige opties — oncommentarieer en migreer wanneer nodig:
-        # ("title_regex",  "Venstertitel (reguliere expressie)"),
-        # ("app_regex",    "Applicatienaam (reguliere expressie)"),
+        # ("title_regex", "Venstertitel (reguliere expressie)"),
+        # ("app_regex",   "Applicatienaam (reguliere expressie)"),
     ]
 
     project = models.ForeignKey(
@@ -171,7 +272,7 @@ class ActivityRule(models.Model):
                     {"match_value": f"Ongeldige reguliere expressie: {exc}"}
                 )
 
-    def apply(self, activity: WindowActivity) -> bool:
+    def apply(self, activity: "WindowActivity") -> bool:
         """
         Geeft True als deze regel van toepassing is op de gegeven activiteit.
         Voeg hier toekomstige match_field-typen toe als extra elif-tak.

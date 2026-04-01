@@ -81,7 +81,7 @@ class TimeEntry(models.Model):
 
 class ActivityMapping(models.Model):
     """
-    Koppeling tussen een WindowActivity en een TimeEntry.
+    Koppeling tussen een UniqueActivity en een TimeEntry.
 
     source geeft aan hoe de koppeling tot stand is gekomen:
       'rule'   — automatisch aangemaakt door een ActivityRule
@@ -98,8 +98,8 @@ class ActivityMapping(models.Model):
         (SOURCE_MANUAL, "Handmatig"),
     ]
 
-    activity = models.ForeignKey(
-        "activities.WindowActivity",
+    unique_activity = models.ForeignKey(
+        "activities.UniqueActivity",
         on_delete=models.CASCADE,
         related_name="mappings",
     )
@@ -116,14 +116,14 @@ class ActivityMapping(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        # Één activiteit mag maar één keer aan dezelfde TimeEntry hangen
-        unique_together = [("activity", "time_entry")]
-        ordering = ["activity__started_at"]
+        # Één unieke activiteit mag maar één keer aan dezelfde TimeEntry hangen
+        unique_together = [("unique_activity", "time_entry")]
+        ordering = ["unique_activity__block__started_at"]
         verbose_name = "activiteitskoppeling"
-        verbose_name_plural = "activiteitsoppelingen"
+        verbose_name_plural = "activiteitskoppelingen"
 
     def __str__(self):
         return (
-            f"{self.activity.app_name} → {self.time_entry.project.name} "
+            f"{self.unique_activity.raw_title[:40]} → {self.time_entry.project.name} "
             f"({self.get_source_display()})"
         )

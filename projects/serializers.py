@@ -22,8 +22,8 @@ class TimeEntrySerializer(serializers.ModelSerializer):
 
 
 class ActivityMappingSerializer(serializers.ModelSerializer):
-    activity_app = serializers.CharField(source="activity.app_name", read_only=True)
-    activity_title = serializers.CharField(source="activity.raw_title", read_only=True)
+    activity_raw_title = serializers.CharField(source="unique_activity.raw_title", read_only=True)
+    activity_app = serializers.CharField(source="unique_activity.block.app_name", read_only=True)
     time_entry_project = serializers.CharField(source="time_entry.project.name", read_only=True)
     source_display = serializers.CharField(source="get_source_display", read_only=True)
 
@@ -31,9 +31,9 @@ class ActivityMappingSerializer(serializers.ModelSerializer):
         model = ActivityMapping
         fields = [
             "id",
-            "activity",
+            "unique_activity",
+            "activity_raw_title",
             "activity_app",
-            "activity_title",
             "time_entry",
             "time_entry_project",
             "source",

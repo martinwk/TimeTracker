@@ -35,6 +35,6 @@ class TimeEntryAdmin(admin.ModelAdmin):
 
 @admin.register(ActivityMapping)
 class ActivityMappingAdmin(admin.ModelAdmin):
-    list_display = ["activity", "time_entry", "source", "created_at"]
+    list_display = ["unique_activity", "time_entry", "source", "created_at"]
     list_filter = ["source", "time_entry__project"]
-    raw_id_fields = ["activity", "time_entry"]
+    raw_id_fields = ["unique_activity", "time_entry"]

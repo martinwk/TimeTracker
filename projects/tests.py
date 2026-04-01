@@ -30,13 +30,27 @@ def time_entry(project):
 
 
 @pytest.fixture
-def activity(db):
-    from datetime import datetime, timezone
-    start = datetime(2026, 3, 13, 9, 0, tzinfo=timezone.utc)
-    end   = datetime(2026, 3, 13, 9, 30, tzinfo=timezone.utc)
-    a = WindowActivity.from_log_line(start, end, "Koers zetten - Lockefeer - Zotero")
-    a.save()
-    return a
+def unique_activity(activity):
+    """Create UniqueActivity from WindowActivity for tests."""
+    from activities.models import ActivityBlock, UniqueActivity
+
+    block = ActivityBlock.objects.create(
+        app_name=activity.app_name,
+        date=activity.date,
+        started_at=activity.started_at,
+        ended_at=activity.ended_at,
+        total_seconds=activity.duration_seconds,
+        activity_count=1,
+        block_minutes=15,
+    )
+    ua = UniqueActivity.objects.create(
+        block=block,
+        raw_title=activity.raw_title,
+        total_seconds=activity.duration_seconds,
+    )
+    activity.unique_activity = ua
+    activity.save()
+    return ua
 
 
 # ── Project ───────────────────────────────────────────────────────────────────
@@ -114,9 +128,9 @@ def test_time_entry_project_protect_on_delete(time_entry, project):
 
 # ── ActivityMapping ───────────────────────────────────────────────────────────
 
-def test_activity_mapping_str(activity, time_entry):
+def test_activity_mapping_str(activity, time_entry, unique_activity):
     mapping = ActivityMapping.objects.create(
-        activity=activity,
+        unique_activity=unique_activity,
         time_entry=time_entry,
         source=ActivityMapping.SOURCE_RULE,
     )
@@ -124,36 +138,36 @@ def test_activity_mapping_str(activity, time_entry):
     assert "Onderzoek" in str(mapping)
 
 
-def test_activity_mapping_source_default(activity, time_entry):
+def test_activity_mapping_source_default(activity, time_entry, unique_activity):
     mapping = ActivityMapping.objects.create(
-        activity=activity,
+        unique_activity=unique_activity,
         time_entry=time_entry,
     )
     assert mapping.source == ActivityMapping.SOURCE_RULE
 
 
-def test_activity_mapping_manual_source(activity, time_entry):
+def test_activity_mapping_manual_source(activity, time_entry, unique_activity):
     mapping = ActivityMapping.objects.create(
-        activity=activity,
+        unique_activity=unique_activity,
         time_entry=time_entry,
         source=ActivityMapping.SOURCE_MANUAL,
     )
     assert mapping.source == ActivityMapping.SOURCE_MANUAL
 
 
-def test_activity_mapping_unique_together(activity, time_entry):
+def test_activity_mapping_unique_together(activity, time_entry, unique_activity):
     """Dezelfde activiteit mag maar één keer aan dezelfde TimeEntry hangen."""
-    ActivityMapping.objects.create(activity=activity, time_entry=time_entry)
+    ActivityMapping.objects.create(unique_activity=unique_activity, time_entry=time_entry)
     with pytest.raises(Exception):
-        ActivityMapping.objects.create(activity=activity, time_entry=time_entry)
+        ActivityMapping.objects.create(unique_activity=unique_activity, time_entry=time_entry)
 
 
-def test_activity_mapping_same_activity_different_entries(activity, project):
+def test_activity_mapping_same_activity_different_entries(activity, project, unique_activity):
     """Dezelfde activiteit mag wel aan twee verschillende TimeEntries hangen."""
     entry1 = TimeEntry.objects.create(project=project, date=date(2026, 3, 13), duration_minutes=30)
     entry2 = TimeEntry.objects.create(project=project, date=date(2026, 3, 13), duration_minutes=30)
-    ActivityMapping.objects.create(activity=activity, time_entry=entry1)
-    ActivityMapping.objects.create(activity=activity, time_entry=entry2)
+    ActivityMapping.objects.create(unique_activity=unique_activity, time_entry=entry1)
+    ActivityMapping.objects.create(unique_activity=unique_activity, time_entry=entry2)
     assert ActivityMapping.objects.count() == 2
 
 

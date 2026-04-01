@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from rest_framework import status, viewsets
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
@@ -6,6 +8,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter
 
 from activities.importer import import_parsed_lines, parse_stream
+from activities.rule_engine import apply_rules
 from .models import WindowActivity, ActivityBlock, UniqueActivity, ActivityRule
 from .serializers import (
     WindowActivitySerializer,
@@ -52,6 +55,69 @@ class ImportAhkLogView(APIView):
 
         return Response(
             {"results": results, "total_imported": total_imported},
+            status=status.HTTP_200_OK,
+        )
+
+
+class ApplyRulesView(APIView):
+    """
+    POST /api/activities/apply-rules/
+
+    Voert alle actieve ActivityRules toe op UniqueActivities.
+
+    Request body (optioneel):
+    {
+        "date": "2026-03-13",  # Enkelvoudige dag
+        "date_from": "2026-03-01",  # Start van bereik
+        "date_to": "2026-03-31"  # Einde van bereik
+    }
+
+    Response:
+    {
+        "mappings_created": 5,
+        "mappings_skipped_manual": 2,
+        "unique_activities_processed": 15
+    }
+    """
+
+    def post(self, request):
+        data = request.data or {}
+        date_str = data.get("date")
+        date_from_str = data.get("date_from")
+        date_to_str = data.get("date_to")
+
+        # Parse dates
+        date_from = None
+        date_to = None
+
+        try:
+            if date_str:
+                date_from = date_to = datetime.strptime(date_str, "%Y-%m-%d").date()
+            if date_from_str:
+                date_from = datetime.strptime(date_from_str, "%Y-%m-%d").date()
+            if date_to_str:
+                date_to = datetime.strptime(date_to_str, "%Y-%m-%d").date()
+        except ValueError as e:
+            return Response(
+                {"error": f"Ongeldige datum: {e}. Gebruik YYYY-MM-DD."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if date_from and date_to and date_from > date_to:
+            return Response(
+                {"error": "date_from moet voor date_to liggen."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Voer regels uit
+        result = apply_rules(date_from=date_from, date_to=date_to)
+
+        return Response(
+            {
+                "mappings_created": result.mappings_created,
+                "mappings_skipped_manual": result.mappings_skipped_manual,
+                "unique_activities_processed": result.unique_activities_processed,
+            },
             status=status.HTTP_200_OK,
         )
 

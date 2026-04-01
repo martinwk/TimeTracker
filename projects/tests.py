@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pytest
 from rest_framework.test import APIClient
@@ -17,6 +17,18 @@ def project(db):
 @pytest.fixture
 def other_project(db):
     return Project.objects.create(name="Administratie", color="#E8593C")
+
+
+@pytest.fixture
+def activity(db):
+    """Create a WindowActivity for Zotero."""
+    activity = WindowActivity.from_log_line(
+        started_at=datetime(2026, 3, 13, 9, 0, tzinfo=timezone.utc),
+        ended_at=datetime(2026, 3, 13, 10, 0, tzinfo=timezone.utc),
+        raw_title="Koersnotatie - Zotero",
+    )
+    activity.save()
+    return activity
 
 
 @pytest.fixture
@@ -128,7 +140,7 @@ def test_time_entry_project_protect_on_delete(time_entry, project):
 
 # ── ActivityMapping ───────────────────────────────────────────────────────────
 
-def test_activity_mapping_str(activity, time_entry, unique_activity):
+def test_activity_mapping_str(time_entry, unique_activity):
     mapping = ActivityMapping.objects.create(
         unique_activity=unique_activity,
         time_entry=time_entry,
@@ -302,10 +314,10 @@ def test_time_entry_update(api_client, time_entry):
 # ── API: ActivityMappingViewSet ────────────────────────────────────────────────
 
 @pytest.mark.django_db
-def test_activity_mapping_list(api_client, activity, time_entry):
+def test_activity_mapping_list(api_client, time_entry, unique_activity):
     """GET /api/activity-mappings/ should return all mappings."""
     mapping = ActivityMapping.objects.create(
-        activity=activity,
+        unique_activity=unique_activity,
         time_entry=time_entry,
         source=ActivityMapping.SOURCE_RULE,
     )
@@ -315,10 +327,10 @@ def test_activity_mapping_list(api_client, activity, time_entry):
 
 
 @pytest.mark.django_db
-def test_activity_mapping_detail(api_client, activity, time_entry):
+def test_activity_mapping_detail(api_client, time_entry, unique_activity):
     """GET /api/activity-mappings/{id}/ should return mapping with nested info."""
     mapping = ActivityMapping.objects.create(
-        activity=activity,
+        unique_activity=unique_activity,
         time_entry=time_entry,
         source=ActivityMapping.SOURCE_RULE,
     )
@@ -330,10 +342,10 @@ def test_activity_mapping_detail(api_client, activity, time_entry):
 
 
 @pytest.mark.django_db
-def test_activity_mapping_filter_by_source(api_client, activity, time_entry):
+def test_activity_mapping_filter_by_source(api_client, time_entry, unique_activity):
     """Filter mappings by source."""
     ActivityMapping.objects.create(
-        activity=activity,
+        unique_activity=unique_activity,
         time_entry=time_entry,
         source=ActivityMapping.SOURCE_RULE,
     )
@@ -343,10 +355,10 @@ def test_activity_mapping_filter_by_source(api_client, activity, time_entry):
 
 
 @pytest.mark.django_db
-def test_activity_mapping_create(api_client, activity, time_entry):
+def test_activity_mapping_create(api_client, time_entry, unique_activity):
     """POST to create a new activity mapping."""
     data = {
-        "activity": activity.id,
+        "unique_activity": unique_activity.id,
         "time_entry": time_entry.id,
         "source": ActivityMapping.SOURCE_MANUAL,
     }
@@ -356,11 +368,11 @@ def test_activity_mapping_create(api_client, activity, time_entry):
 
 
 @pytest.mark.django_db
-def test_activity_mapping_create_duplicate_fails(api_client, activity, time_entry):
+def test_activity_mapping_create_duplicate_fails(api_client, time_entry, unique_activity):
     """Creating duplicate mapping should fail."""
-    ActivityMapping.objects.create(activity=activity, time_entry=time_entry)
+    ActivityMapping.objects.create(unique_activity=unique_activity, time_entry=time_entry)
     data = {
-        "activity": activity.id,
+        "unique_activity": unique_activity.id,
         "time_entry": time_entry.id,
         "source": ActivityMapping.SOURCE_MANUAL,
     }

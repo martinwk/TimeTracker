@@ -32,6 +32,6 @@ class ActivityMappingViewSet(viewsets.ModelViewSet):
     queryset = ActivityMapping.objects.all()
     serializer_class = ActivityMappingSerializer
     filter_backends = [DjangoFilterBackend, OrderingFilter]
-    filterset_fields = ["activity", "time_entry", "source"]
-    ordering_fields = ["created_at", "activity__started_at"]
+    filterset_fields = ["unique_activity", "time_entry", "source"]
+    ordering_fields = ["created_at", "unique_activity__block__started_at"]
     ordering = ["-created_at"]

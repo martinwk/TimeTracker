@@ -106,23 +106,31 @@ def apply_rules(
                 defaults={"duration_minutes": 0},  # Placeholder, wordt aangepast
             )
 
-            # Verwijder rule-gebaseerde mappings naar andere projecten
-            # (zodat we oude rule-matches niet behouden als regel verandert)
-            ActivityMapping.objects.filter(
-                unique_activity=ua,
-                source=ActivityMapping.SOURCE_RULE,
-            ).exclude(
-                time_entry=time_entry
-            ).delete()
-
-            # Maak ActivityMapping aan (of gebruik bestaande als die opnieuw overeenkomt)
-            _, created = ActivityMapping.objects.get_or_create(
+            # Controleer of mapping al naar het juiste time_entry wijst
+            existing_mapping = ActivityMapping.objects.filter(
                 unique_activity=ua,
                 time_entry=time_entry,
-                defaults={"source": ActivityMapping.SOURCE_RULE},
-            )
-            if created:
+                source=ActivityMapping.SOURCE_RULE,
+            ).exists()
+
+            if not existing_mapping:
+                # Verwijder rule-gebaseerde mappings naar andere projecten
+                # (zodat we oude rule-matches niet behouden als regel verandert)
+                ActivityMapping.objects.filter(
+                    unique_activity=ua,
+                    source=ActivityMapping.SOURCE_RULE,
+                ).exclude(
+                    time_entry=time_entry
+                ).delete()
+
+                # Maak ActivityMapping aan
+                ActivityMapping.objects.create(
+                    unique_activity=ua,
+                    time_entry=time_entry,
+                    source=ActivityMapping.SOURCE_RULE,
+                )
                 mappings_created += 1
+
             logger.debug(
                 "apply_rules: %s → %s (regel #%d)",
                 ua.raw_title[:40],

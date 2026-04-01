@@ -239,10 +239,6 @@ def test_idempotence(zotero_rule, unique_activity_zotero, window_activity_for_zo
     result1 = apply_rules()
     result2 = apply_rules()
 
-    # Beide moeten dezelfde telnummers geven
-    assert result1.mappings_created == result2.mappings_created
-    assert result1.mappings_skipped_manual == result2.mappings_skipped_manual
-
     # Maar tweede keer: mappings_created = 0 omdat ze al bestaan (en rule-based zijn)
     assert result1.mappings_created == 1
     assert result2.mappings_created == 0  # Al gemaakt, nu verwijderd en opnieuw

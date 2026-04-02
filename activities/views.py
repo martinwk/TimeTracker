@@ -63,7 +63,7 @@ class ApplyRulesView(APIView):
     """
     POST /api/activities/apply-rules/
 
-    Voert alle actieve ActivityRules toe op UniqueActivities.
+    Voert alle actieve ActivityRules toe op ActivityBlocks zonder project.
 
     Request body (optioneel):
     {
@@ -74,9 +74,8 @@ class ApplyRulesView(APIView):
 
     Response:
     {
-        "mappings_created": 5,
-        "mappings_skipped_manual": 2,
-        "unique_activities_processed": 15
+        "blocks_assigned": 5,
+        "blocks_processed": 15
     }
     """
 
@@ -114,9 +113,8 @@ class ApplyRulesView(APIView):
 
         return Response(
             {
-                "mappings_created": result.mappings_created,
-                "mappings_skipped_manual": result.mappings_skipped_manual,
-                "unique_activities_processed": result.unique_activities_processed,
+                "blocks_assigned": result.blocks_assigned,
+                "blocks_processed": result.blocks_processed,
             },
             status=status.HTTP_200_OK,
         )
@@ -135,7 +133,7 @@ class ActivityBlockViewSet(viewsets.ModelViewSet):
     queryset = ActivityBlock.objects.all()
     serializer_class = ActivityBlockSerializer
     filter_backends = [DjangoFilterBackend, OrderingFilter]
-    filterset_fields = ["date", "app_name"]
+    filterset_fields = ["date", "app_name", "project"]
     ordering_fields = ["started_at", "date", "app_name"]
     ordering = ["-started_at"]
 

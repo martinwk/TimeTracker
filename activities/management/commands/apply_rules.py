@@ -83,8 +83,8 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.SUCCESS(
                 f"✓ ActivityRules toegepast {date_range}\n"
-                f"  {result.mappings_created} mappings aangemaakt\n"
-                f"  {result.mappings_skipped_manual} handmatige overgeslagen\n"
-                f"  {result.unique_activities_processed} activiteiten verwerkt"
+                f"  {result.blocks_assigned} blokken toegewezen\n"
+                f"  {result.blocks_skipped_manual} handmatig ingestelde overgeslagen\n"
+                f"  {result.blocks_processed} blokken verwerkt"
             )
         )

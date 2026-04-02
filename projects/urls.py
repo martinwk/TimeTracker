@@ -1,16 +1,20 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import (
-    ProjectViewSet,
-    TimeEntryViewSet,
-    ActivityMappingViewSet,
-)
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from .views import ProjectViewSet
+
+@api_view(['GET'])
+def projects_root(request):
+    """Projects API root."""
+    return Response({
+        'projects': f"{request.build_absolute_uri('/api/projects/')}",
+    })
 
 router = DefaultRouter()
-router.register(r"projects", ProjectViewSet, basename="project")
-router.register(r"time-entries", TimeEntryViewSet, basename="time-entry")
-router.register(r"activity-mappings", ActivityMappingViewSet, basename="activity-mapping")
+router.register(r"", ProjectViewSet, basename="project")
 
 urlpatterns = [
+    path("", projects_root, name="projects-root"),
     path("", include(router.urls)),
 ]

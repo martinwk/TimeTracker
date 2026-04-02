@@ -1,11 +1,11 @@
 """
-Rule engine voor het automatisch koppelen van UniqueActivities aan projecten.
+Rule engine voor het automatisch koppelen van ActivityBlocks aan projecten.
 
 Algoritme:
   1. Haal alle actieve ActivityRules op, gesorteerd op prioriteit (laag = belangrijk)
-  2. Voor elke UniqueActivity: loop through regels totdat één matcht
-  3. Bij eerste match: verwijder oudere rule-gebaseerde mappings, maak nieuwe aan
-  4. Handmatige mappings worden nooit overschreven (skipped)
+  2. Voor elke ActivityBlock zonder project: loop through regels totdat één matcht
+  3. Bij eerste match: stel block.project in met het project van de regel
+  4. Handmatig ingestelde projecten worden nooit overschreven
   5. Return statistieken: aangemaakt, skipped, al handmatig
 """
 
@@ -14,8 +14,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Optional
 
-from activities.models import ActivityRule, UniqueActivity
-from projects.models import ActivityMapping, TimeEntry
+from activities.models import ActivityRule, ActivityBlock, UniqueActivity
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +22,9 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ApplyRulesResult:
     """Resultaat van apply_rules() operatie."""
-    mappings_created: int
-    mappings_skipped_manual: int  # Handmatige mappings niet overschreven
-    unique_activities_processed: int
+    blocks_assigned: int
+    blocks_skipped_manual: int
+    blocks_processed: int
 
 
 def apply_rules(
@@ -33,7 +32,7 @@ def apply_rules(
     date_to: Optional[date] = None,
 ) -> ApplyRulesResult:
     """
-    Voer alle actieve ActivityRules toe op UniqueActivities.
+    Voer alle actieve ActivityRules toe op ActivityBlocks zonder project.
 
     Args:
         date_from: Startdatum (inclusief). Geen filter als None.
@@ -43,9 +42,9 @@ def apply_rules(
         ApplyRulesResult met tellingen
 
     Gedrag:
-      - Rule-gebaseerde mappings voor verwerkte activities worden eerst verwijderd
-      - Bij elke UniqueActivity: eerste matchende regel (op prioriteit) wordt gebruikt
-      - Handmatige mappings worden nooit overschreven
+      - Alleen blocks zonder project worden verwerkt (project is None)
+      - Bij elke block: eerste matchende regel (op prioriteit) wordt gebruikt
+      - Block.project wordt ingesteld op het project van de regel
       - Idempotent: meerdere keer draaien geeft dezelfde resultaat
     """
     # Haal active rules op, sorteren op prioriteit (laag eerst)
@@ -54,100 +53,103 @@ def apply_rules(
     if not rules.exists():
         logger.info("apply_rules: Geen actieve regels gevonden.")
         return ApplyRulesResult(
-            mappings_created=0,
-            mappings_skipped_manual=0,
-            unique_activities_processed=0,
+            blocks_assigned=0,
+            blocks_skipped_manual=0,
+            blocks_processed=0,
         )
 
-    # Filter UniqueActivities op datum (via block.date)
-    unique_activities = UniqueActivity.objects.all()
+    # Filter ActivityBlocks: alleen degenen zonder project
+    blocks = ActivityBlock.objects.filter(project__isnull=True)
     if date_from or date_to:
         if date_from:
-            unique_activities = unique_activities.filter(block__date__gte=date_from)
+            blocks = blocks.filter(date__gte=date_from)
         if date_to:
-            unique_activities = unique_activities.filter(block__date__lte=date_to)
+            blocks = blocks.filter(date__lte=date_to)
 
-    unique_activities = unique_activities.order_by("block__date", "block__started_at")
+    blocks = blocks.order_by("date", "started_at")
 
-    mappings_created = 0
-    mappings_skipped_manual = 0
-    unique_activities_processed = 0
+    blocks_assigned = 0
+    blocks_skipped_manual = 0
+    blocks_processed = 0
 
-    for ua in unique_activities:
-        unique_activities_processed += 1
-
-        # Controleer of er al een handmatige mapping bestaat
-        manual_mapping = ActivityMapping.objects.filter(
-            unique_activity=ua,
-            source=ActivityMapping.SOURCE_MANUAL,
-        ).exists()
-
-        if manual_mapping:
-            mappings_skipped_manual += 1
-            # Handmatige mapping: skip deze activiteit
-            continue
+    for block in blocks:
+        blocks_processed += 1
 
         # Loop through regels op prioriteit
         matched_rule = None
         for rule in rules:
-            # Check of regel matcht op WindowActivity-velden
-            # We controleren de FirstWindowActivity in de UniqueActivity
-            window_activity = ua.occurrences.first()
-            if window_activity and rule.apply(window_activity):
-                matched_rule = rule
-                break
+            # Handle special rule types that use block history
+            if rule.match_field == "dominant_activity":
+                # Check if dominant activity title matches and has project history
+                dominant = block.dominant_title
+                if dominant and rule.match_value.lower() == dominant.lower():
+                    project = block.get_project_for_dominant_activity()
+                    if project:
+                        block.project = project
+                        block.save(update_fields=["project"])
+                        from activities.models import BlockProjectHistory
+                        BlockProjectHistory.objects.create(
+                            block=block,
+                            project=project,
+                            assigned_by="rule",
+                        )
+                        blocks_assigned += 1
+                        matched_rule = rule
+                        break
+            
+            elif rule.match_field == "recent_project":
+                # Check if recent project exists for this app
+                val = rule.match_value.lower()
+                if block.app_name.lower() == val:
+                    project = block.get_recent_project_for_app()
+                    if project:
+                        block.project = project
+                        block.save(update_fields=["project"])
+                        from activities.models import BlockProjectHistory
+                        BlockProjectHistory.objects.create(
+                            block=block,
+                            project=project,
+                            assigned_by="rule",
+                        )
+                        blocks_assigned += 1
+                        matched_rule = rule
+                        break
+            
+            else:
+                # Standard rules: app_name, title_contains, etc.
+                window_activity = block.unique_activities.first().occurrences.first()
+                if window_activity and rule.apply(window_activity):
+                    matched_rule = rule
+                    block.project = rule.project
+                    block.save(update_fields=["project"])
+                    
+                    from activities.models import BlockProjectHistory
+                    BlockProjectHistory.objects.create(
+                        block=block,
+                        project=rule.project,
+                        assigned_by="rule",
+                    )
+                    blocks_assigned += 1
+                    break
 
-        # Bij match: maak TimeEntry en ActivityMapping aan
         if matched_rule:
-            # Haal of maak TimeEntry aan voor deze dag en project
-            time_entry, _ = TimeEntry.objects.get_or_create(
-                project=matched_rule.project,
-                date=ua.block.date,
-                defaults={"duration_minutes": 0},  # Placeholder, wordt aangepast
-            )
-
-            # Controleer of mapping al naar het juiste time_entry wijst
-            existing_mapping = ActivityMapping.objects.filter(
-                unique_activity=ua,
-                time_entry=time_entry,
-                source=ActivityMapping.SOURCE_RULE,
-            ).exists()
-
-            if not existing_mapping:
-                # Verwijder rule-gebaseerde mappings naar andere projecten
-                # (zodat we oude rule-matches niet behouden als regel verandert)
-                ActivityMapping.objects.filter(
-                    unique_activity=ua,
-                    source=ActivityMapping.SOURCE_RULE,
-                ).exclude(
-                    time_entry=time_entry
-                ).delete()
-
-                # Maak ActivityMapping aan
-                ActivityMapping.objects.create(
-                    unique_activity=ua,
-                    time_entry=time_entry,
-                    source=ActivityMapping.SOURCE_RULE,
-                )
-                mappings_created += 1
-
             logger.debug(
-                "apply_rules: %s → %s (regel #%d)",
-                ua.raw_title[:40],
+                "apply_rules: Block %d (%s) → %s (regel #%d, type: %s)",
+                block.id,
+                block.dominant_title[:40] if block.dominant_title else "N/A",
                 matched_rule.project.name,
                 matched_rule.id,
+                matched_rule.match_field,
             )
 
     logger.info(
-        "apply_rules: %d mappings aangemaakt, %d handmatige overgeslagen, "
-        "%d activiteiten verwerkt",
-        mappings_created,
-        mappings_skipped_manual,
-        unique_activities_processed,
+        "apply_rules: %d blocks toegewezen, %d activiteiten verwerkt",
+        blocks_assigned,
+        blocks_processed,
     )
 
     return ApplyRulesResult(
-        mappings_created=mappings_created,
-        mappings_skipped_manual=mappings_skipped_manual,
-        unique_activities_processed=unique_activities_processed,
+        blocks_assigned=blocks_assigned,
+        blocks_skipped_manual=blocks_skipped_manual,
+        blocks_processed=blocks_processed,
     )

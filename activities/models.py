@@ -131,6 +131,9 @@ class ActivityBlock(models.Model):
     Wordt aangemaakt door: python manage.py aggregate_activities
     Kan opnieuw worden gegenereerd zonder dataverlies — de ruwe
     WindowActivity records blijven altijd intact.
+
+    project: FK naar Project. Kan handmatig of automatisch worden ingesteld
+    via ActivityRule. Nullable tot ActivityRule is aangepast.
     """
 
     app_name = models.CharField(max_length=255, db_index=True)
@@ -145,6 +148,14 @@ class ActivityBlock(models.Model):
     )
     block_minutes = models.PositiveSmallIntegerField(
         help_text="Tijdvenster in minuten waarbinnen activiteiten zijn samengevoegd."
+    )
+    project = models.ForeignKey(
+        "projects.Project",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="activity_blocks",
+        help_text="Project waaraan dit blok is toegewezen (handmatig of automatisch via regel).",
     )
 
     class Meta:
@@ -168,6 +179,57 @@ class ActivityBlock(models.Model):
         """De titel met de meeste cumulatieve seconden in dit blok."""
         ua = self.unique_activities.first()
         return ua.raw_title if ua else None
+
+    def get_recent_project_for_app(self, days_back=30):
+        """
+        Geeft het meest recent toegewezen project voor hetzelfde app_name.
+        
+        Args:
+            days_back: Hoeveel dagen terug zoeken in de geschiedenis.
+        
+        Returns:
+            Project object of None.
+        """
+        from datetime import timedelta
+        from django.utils import timezone
+        
+        cutoff_date = self.date - timedelta(days=days_back)
+        recent_block = ActivityBlock.objects.filter(
+            app_name=self.app_name,
+            project__isnull=False,
+            date__gte=cutoff_date,
+            date__lt=self.date,
+        ).order_by("-date").first()
+        
+        return recent_block.project if recent_block else None
+
+    def get_project_for_dominant_activity(self):
+        """
+        Geeft het project dat eerder aan deze dominant activity title
+        werd gekoppeld (meest voorkomend project in geschiedenis).
+        
+        Returns:
+            Project object of None.
+        """
+        dominant = self.dominant_title
+        if not dominant:
+            return None
+        
+        # Find all blocks with same dominant title that have a project
+        from django.db.models import Count
+        
+        history = ActivityBlock.objects.filter(
+            unique_activities__raw_title=dominant,
+            project__isnull=False,
+            date__lt=self.date,  # Only past blocks
+        ).values("project").annotate(
+            count=Count("project")
+        ).order_by("-count").first()
+        
+        if history:
+            from projects.models import Project
+            return Project.objects.get(pk=history["project"])
+        return None
 
 
 class UniqueActivity(models.Model):
@@ -226,6 +288,8 @@ class ActivityRule(models.Model):
     MATCH_FIELD_CHOICES = [
         ("app_name", "Applicatienaam (exact, hoofdletterongevoelig)"),
         ("title_contains", "Venstertitel bevat tekst (hoofdletterongevoelig)"),
+        ("dominant_activity", "Dominante activity-titel geschiedenis"),
+        ("recent_project", "Recent gebruikt project voor deze app"),
         # Toekomstige opties — oncommentarieer en migreer wanneer nodig:
         # ("title_regex", "Venstertitel (reguliere expressie)"),
         # ("app_regex",   "Applicatienaam (reguliere expressie)"),
@@ -285,6 +349,17 @@ class ActivityRule(models.Model):
         if self.match_field == "title_contains":
             return val in activity.raw_title.lower()
 
+        if self.match_field == "dominant_activity":
+            # match_value should be the exact dominant activity title
+            if hasattr(activity, 'unique_activity') and activity.unique_activity:
+                return activity.unique_activity.raw_title.lower() == val.lower()
+            return False
+
+        if self.match_field == "recent_project":
+            # match_value should be "app_name" - this rule matches if app_name matches
+            # and there's a recent project history for this app
+            return activity.app_name.lower() == val.lower()
+
         # Toekomstige regex-opties:
         # if self.match_field == "title_regex":
         #     return bool(re.search(self.match_value, activity.raw_title, re.IGNORECASE))
@@ -292,3 +367,58 @@ class ActivityRule(models.Model):
         #     return bool(re.search(self.match_value, activity.app_name, re.IGNORECASE))
 
         return False
+
+
+class BlockProjectHistory(models.Model):
+    """
+    Geschiedenis van project-toewijzingen aan activity blocks.
+    
+    Gebruikt om intelligent project-suggestions te genereren op basis van:
+    - Hoe vaak een project voor een bepaalde app wordt gebruikt
+    - Hoe recent een project voor een app is gebruikt
+    - Welk project het meest voorkomt voor een bepaalde activity title
+    
+    Dit model wordt automatisch gevuld als blocks een project krijgen
+    (via regel of handmatig).
+    """
+
+    block = models.ForeignKey(
+        ActivityBlock,
+        on_delete=models.CASCADE,
+        related_name="project_assignments",
+        help_text="Het ActivityBlock dat aan een project is toegewezen.",
+    )
+    project = models.ForeignKey(
+        "projects.Project",
+        on_delete=models.CASCADE,
+        related_name="block_assignments",
+        help_text="Het project waartoe het block is toegewezen.",
+    )
+    assigned_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="Timestamp van de toewijzing.",
+    )
+    assigned_by = models.CharField(
+        max_length=20,
+        choices=[
+            ("rule", "Automatische regel"),
+            ("manual", "Handmatig door gebruiker"),
+        ],
+        default="rule",
+        help_text="Hoe de toewijzing tot stand is gekomen.",
+    )
+
+    class Meta:
+        ordering = ["-assigned_at"]
+        verbose_name = "block-project geschiedenis"
+        verbose_name_plural = "block-project geschiedenissen"
+        indexes = [
+            models.Index(fields=["block", "-assigned_at"]),
+            models.Index(fields=["project", "-assigned_at"]),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.block.app_name} ({self.block.date}) → "
+            f"{self.project.name} ({self.get_assigned_by_display()})"
+        )

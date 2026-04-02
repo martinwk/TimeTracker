@@ -117,7 +117,7 @@ def window_activity(db):
 @pytest.mark.django_db
 def test_window_activity_list(api_client, window_activity):
     """GET /api/window-activities/ should return all activities."""
-    response = api_client.get("/api/window-activities/")
+    response = api_client.get("/api/activities/window-activities/")
     assert response.status_code == 200
     assert response.data["count"] == 1
     assert response.data["results"][0]["id"] == window_activity.id
@@ -126,7 +126,7 @@ def test_window_activity_list(api_client, window_activity):
 @pytest.mark.django_db
 def test_window_activity_detail(api_client, window_activity):
     """GET /api/window-activities/{id}/ should return single activity."""
-    response = api_client.get(f"/api/window-activities/{window_activity.id}/")
+    response = api_client.get(f"/api/activities/window-activities/{window_activity.id}/")
     assert response.status_code == 200
     assert response.data["app_name"] == "VS Code"
     assert response.data["is_noise"] is False
@@ -135,7 +135,7 @@ def test_window_activity_detail(api_client, window_activity):
 @pytest.mark.django_db
 def test_window_activity_filter_by_date(api_client, window_activity):
     """Filter activities by date."""
-    response = api_client.get(f"/api/window-activities/?date=2026-03-13")
+    response = api_client.get("/api/activities/window-activities/?date=2026-03-13")
     assert response.status_code == 200
     assert response.data["count"] == 1
 
@@ -143,7 +143,7 @@ def test_window_activity_filter_by_date(api_client, window_activity):
 @pytest.mark.django_db
 def test_window_activity_filter_by_app_name(api_client, window_activity):
     """Filter activities by app_name."""
-    response = api_client.get("/api/window-activities/?app_name=VS Code")
+    response = api_client.get("/api/activities/window-activities/?app_name=VS Code")
     assert response.status_code == 200
     assert response.data["count"] == 1
 
@@ -151,7 +151,7 @@ def test_window_activity_filter_by_app_name(api_client, window_activity):
 @pytest.mark.django_db
 def test_window_activity_filter_by_is_noise(api_client, window_activity):
     """Filter activities by is_noise."""
-    response = api_client.get("/api/window-activities/?is_noise=false")
+    response = api_client.get("/api/activities/window-activities/?is_noise=false")
     assert response.status_code == 200
     assert response.data["count"] == 1
 
@@ -168,7 +168,7 @@ def test_window_activity_create(api_client):
         "date": "2026-03-13",
         "is_noise": False,
     }
-    response = api_client.post("/api/window-activities/", data)
+    response = api_client.post("/api/activities/window-activities/", data)
     assert response.status_code == 201
     assert WindowActivity.objects.count() == 1
 
@@ -177,7 +177,7 @@ def test_window_activity_create(api_client):
 def test_window_activity_update(api_client, window_activity):
     """PUT to update is_noise field."""
     data = {"is_noise": True}
-    response = api_client.patch(f"/api/window-activities/{window_activity.id}/", data)
+    response = api_client.patch(f"/api/activities/window-activities/{window_activity.id}/", data)
     assert response.status_code == 200
     window_activity.refresh_from_db()
     assert window_activity.is_noise is True
@@ -186,7 +186,7 @@ def test_window_activity_update(api_client, window_activity):
 @pytest.mark.django_db
 def test_window_activity_delete(api_client, window_activity):
     """DELETE to remove an activity."""
-    response = api_client.delete(f"/api/window-activities/{window_activity.id}/")
+    response = api_client.delete(f"/api/activities/window-activities/{window_activity.id}/")
     assert response.status_code == 204
     assert WindowActivity.objects.count() == 0
 
@@ -211,7 +211,7 @@ def activity_block(db):
 @pytest.mark.django_db
 def test_activity_block_list(api_client, activity_block):
     """GET /api/activity-blocks/ should return all blocks."""
-    response = api_client.get("/api/activity-blocks/")
+    response = api_client.get("/api/activities/activity-blocks/")
     assert response.status_code == 200
     assert response.data["count"] == 1
 
@@ -219,7 +219,7 @@ def test_activity_block_list(api_client, activity_block):
 @pytest.mark.django_db
 def test_activity_block_detail(api_client, activity_block):
     """GET /api/activity-blocks/{id}/ should return block with computed fields."""
-    response = api_client.get(f"/api/activity-blocks/{activity_block.id}/")
+    response = api_client.get(f"/api/activities/activity-blocks/{activity_block.id}/")
     assert response.status_code == 200
     assert response.data["app_name"] == "VS Code"
     assert "total_minutes" in response.data
@@ -229,7 +229,7 @@ def test_activity_block_detail(api_client, activity_block):
 @pytest.mark.django_db
 def test_activity_block_filter_by_date(api_client, activity_block):
     """Filter blocks by date."""
-    response = api_client.get("/api/activity-blocks/?date=2026-03-13")
+    response = api_client.get("/api/activities/activity-blocks/?date=2026-03-13")
     assert response.status_code == 200
     assert response.data["count"] == 1
 
@@ -246,7 +246,7 @@ def test_activity_block_create(api_client):
         "activity_count": 5,
         "block_minutes": 30,
     }
-    response = api_client.post("/api/activity-blocks/", data)
+    response = api_client.post("/api/activities/activity-blocks/", data)
     assert response.status_code == 201
 
 
@@ -266,7 +266,7 @@ def unique_activity(activity_block):
 @pytest.mark.django_db
 def test_unique_activity_list(api_client, unique_activity):
     """GET /api/unique-activities/ should return all unique activities."""
-    response = api_client.get("/api/unique-activities/")
+    response = api_client.get("/api/activities/unique-activities/")
     assert response.status_code == 200
     assert response.data["count"] == 1
 
@@ -274,7 +274,7 @@ def test_unique_activity_list(api_client, unique_activity):
 @pytest.mark.django_db
 def test_unique_activity_detail(api_client, unique_activity):
     """GET /api/unique-activities/{id}/ should return unique activity."""
-    response = api_client.get(f"/api/unique-activities/{unique_activity.id}/")
+    response = api_client.get(f"/api/activities/unique-activities/{unique_activity.id}/")
     assert response.status_code == 200
     assert response.data["raw_title"] == "test.py - VS Code"
     assert "total_minutes" in response.data
@@ -283,7 +283,7 @@ def test_unique_activity_detail(api_client, unique_activity):
 @pytest.mark.django_db
 def test_unique_activity_filter_by_block(api_client, unique_activity, activity_block):
     """Filter unique activities by block."""
-    response = api_client.get(f"/api/unique-activities/?block={activity_block.id}")
+    response = api_client.get(f"/api/activities/unique-activities/?block={activity_block.id}")
     assert response.status_code == 200
     assert response.data["count"] == 1
 
@@ -312,7 +312,7 @@ def activity_rule(project_for_rule):
 @pytest.mark.django_db
 def test_activity_rule_list(api_client, activity_rule):
     """GET /api/activity-rules/ should return all rules."""
-    response = api_client.get("/api/activity-rules/")
+    response = api_client.get("/api/activities/activity-rules/")
     assert response.status_code == 200
     assert response.data["count"] == 1
 
@@ -320,7 +320,7 @@ def test_activity_rule_list(api_client, activity_rule):
 @pytest.mark.django_db
 def test_activity_rule_detail(api_client, activity_rule):
     """GET /api/activity-rules/{id}/ should return rule with display values."""
-    response = api_client.get(f"/api/activity-rules/{activity_rule.id}/")
+    response = api_client.get(f"/api/activities/activity-rules/{activity_rule.id}/")
     assert response.status_code == 200
     assert response.data["match_field"] == "app_name"
     assert response.data["match_value"] == "VS Code"
@@ -330,7 +330,7 @@ def test_activity_rule_detail(api_client, activity_rule):
 @pytest.mark.django_db
 def test_activity_rule_filter_by_project(api_client, activity_rule, project_for_rule):
     """Filter rules by project."""
-    response = api_client.get(f"/api/activity-rules/?project={project_for_rule.id}")
+    response = api_client.get(f"/api/activities/activity-rules/?project={project_for_rule.id}")
     assert response.status_code == 200
     assert response.data["count"] == 1
 
@@ -338,7 +338,7 @@ def test_activity_rule_filter_by_project(api_client, activity_rule, project_for_
 @pytest.mark.django_db
 def test_activity_rule_filter_by_is_active(api_client, activity_rule):
     """Filter rules by is_active."""
-    response = api_client.get("/api/activity-rules/?is_active=true")
+    response = api_client.get("/api/activities/activity-rules/?is_active=true")
     assert response.status_code == 200
     assert response.data["count"] == 1
 
@@ -353,7 +353,7 @@ def test_activity_rule_create(api_client, project_for_rule):
         "priority": 5,
         "is_active": True,
     }
-    response = api_client.post("/api/activity-rules/", data)
+    response = api_client.post("/api/activities/activity-rules/", data)
     assert response.status_code == 201
     assert ActivityRule.objects.count() == 1
 
@@ -362,7 +362,7 @@ def test_activity_rule_create(api_client, project_for_rule):
 def test_activity_rule_update(api_client, activity_rule):
     """PATCH to update priority."""
     data = {"priority": 20}
-    response = api_client.patch(f"/api/activity-rules/{activity_rule.id}/", data)
+    response = api_client.patch(f"/api/activities/activity-rules/{activity_rule.id}/", data)
     assert response.status_code == 200
     activity_rule.refresh_from_db()
     assert activity_rule.priority == 20

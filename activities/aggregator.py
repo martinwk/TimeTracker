@@ -191,10 +191,10 @@ def aggregate_day(target_date: date, block_minutes: int = DEFAULT_BLOCK_MINUTES)
     from activities.rule_engine import apply_rules
     rules_result = apply_rules(date_from=target_date, date_to=target_date)
     logger.info(
-        "%s: %d rule-mappings aangemaakt, %d handmatige overgeslagen",
+        "%s: %d blokken toegewezen via regels, %d handmatig ingesteld overgeslagen",
         target_date,
-        rules_result.mappings_created,
-        rules_result.mappings_skipped_manual,
+        rules_result.blocks_assigned,
+        rules_result.blocks_skipped_manual,
     )
 
     return AggregateResult(

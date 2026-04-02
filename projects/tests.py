@@ -1,10 +1,15 @@
+"""
+Tests for the projects app.
+Updated for Phase 3: focuses on Project model with ActivityBlock integration.
+"""
+
 from datetime import date, datetime, timezone
 
 import pytest
 from rest_framework.test import APIClient
 
-from activities.models import WindowActivity
-from projects.models import ActivityMapping, Project, TimeEntry
+from activities.models import ActivityBlock, WindowActivity
+from projects.models import Project
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -20,52 +25,21 @@ def other_project(db):
 
 
 @pytest.fixture
-def activity(db):
-    """Create a WindowActivity for Zotero."""
-    activity = WindowActivity.from_log_line(
+def activity_block(db, project):
+    """Create an ActivityBlock assigned to a project."""
+    return ActivityBlock.objects.create(
+        app_name="Zotero",
+        date=date(2026, 3, 13),
         started_at=datetime(2026, 3, 13, 9, 0, tzinfo=timezone.utc),
         ended_at=datetime(2026, 3, 13, 10, 0, tzinfo=timezone.utc),
-        raw_title="Koersnotatie - Zotero",
-    )
-    activity.save()
-    return activity
-
-
-@pytest.fixture
-def time_entry(project):
-    return TimeEntry.objects.create(
-        project=project,
-        date=date(2026, 3, 13),
-        duration_minutes=90,
-        notes="Literatuurstudie",
-    )
-
-
-@pytest.fixture
-def unique_activity(activity):
-    """Create UniqueActivity from WindowActivity for tests."""
-    from activities.models import ActivityBlock, UniqueActivity
-
-    block = ActivityBlock.objects.create(
-        app_name=activity.app_name,
-        date=activity.date,
-        started_at=activity.started_at,
-        ended_at=activity.ended_at,
-        total_seconds=activity.duration_seconds,
+        total_seconds=3600,
         activity_count=1,
         block_minutes=15,
+        project=project,
     )
-    ua = UniqueActivity.objects.create(
-        block=block,
-        raw_title=activity.raw_title,
-        total_seconds=activity.duration_seconds,
-    )
-    activity.unique_activity = ua
-    activity.save()
-    return ua
 
 
-# ── Project ───────────────────────────────────────────────────────────────────
+# ── Project Model Tests ────────────────────────────────────────────────────────
 
 def test_project_str(project):
     assert str(project) == "Onderzoek"
@@ -76,121 +50,100 @@ def test_project_defaults(project):
     assert project.notes == ""
 
 
-def test_project_total_minutes_no_entries(project):
+def test_project_total_minutes_no_blocks(project):
+    """Project with no blocks should have 0 minutes."""
     assert project.total_minutes() == 0
 
 
-def test_project_total_minutes_with_entries(project):
-    TimeEntry.objects.create(project=project, date=date(2026, 3, 13), duration_minutes=60)
-    TimeEntry.objects.create(project=project, date=date(2026, 3, 13), duration_minutes=45)
-    assert project.total_minutes() == 105
+def test_project_total_minutes_with_blocks(project):
+    """Project total_minutes should aggregate ActivityBlock durations."""
+    ActivityBlock.objects.create(
+        app_name="VSCode",
+        date=date(2026, 3, 13),
+        started_at=datetime(2026, 3, 13, 9, 0, tzinfo=timezone.utc),
+        ended_at=datetime(2026, 3, 13, 10, 0, tzinfo=timezone.utc),
+        total_seconds=3600,  # 1 hour
+        activity_count=1,
+        block_minutes=15,
+        project=project,
+    )
+    ActivityBlock.objects.create(
+        app_name="Word",
+        date=date(2026, 3, 13),
+        started_at=datetime(2026, 3, 13, 10, 0, tzinfo=timezone.utc),
+        ended_at=datetime(2026, 3, 13, 10, 45, tzinfo=timezone.utc),
+        total_seconds=2700,  # 45 minutes
+        activity_count=1,
+        block_minutes=15,
+        project=project,
+    )
+    assert project.total_minutes() == 105.0  # 60 + 45 = 105 minutes
 
 
 def test_project_total_minutes_filtered_by_date(project):
-    TimeEntry.objects.create(project=project, date=date(2026, 3, 13), duration_minutes=60)
-    TimeEntry.objects.create(project=project, date=date(2026, 3, 14), duration_minutes=30)
-    assert project.total_minutes(date=date(2026, 3, 13)) == 60
-    assert project.total_minutes(date=date(2026, 3, 14)) == 30
+    """Project total_minutes should filter by date."""
+    ActivityBlock.objects.create(
+        app_name="VSCode",
+        date=date(2026, 3, 13),
+        started_at=datetime(2026, 3, 13, 9, 0, tzinfo=timezone.utc),
+        ended_at=datetime(2026, 3, 13, 10, 0, tzinfo=timezone.utc),
+        total_seconds=3600,
+        activity_count=1,
+        block_minutes=15,
+        project=project,
+    )
+    ActivityBlock.objects.create(
+        app_name="Word",
+        date=date(2026, 3, 14),
+        started_at=datetime(2026, 3, 14, 9, 0, tzinfo=timezone.utc),
+        ended_at=datetime(2026, 3, 14, 9, 30, tzinfo=timezone.utc),
+        total_seconds=1800,
+        activity_count=1,
+        block_minutes=15,
+        project=project,
+    )
+    assert project.total_minutes(date=date(2026, 3, 13)) == 60.0
+    assert project.total_minutes(date=date(2026, 3, 14)) == 30.0
 
 
 def test_project_total_minutes_other_project_not_counted(project, other_project):
-    TimeEntry.objects.create(project=project,       date=date(2026, 3, 13), duration_minutes=60)
-    TimeEntry.objects.create(project=other_project, date=date(2026, 3, 13), duration_minutes=99)
-    assert project.total_minutes() == 60
+    """Project total_minutes should not count blocks from other projects."""
+    ActivityBlock.objects.create(
+        app_name="VSCode",
+        date=date(2026, 3, 13),
+        started_at=datetime(2026, 3, 13, 9, 0, tzinfo=timezone.utc),
+        ended_at=datetime(2026, 3, 13, 10, 0, tzinfo=timezone.utc),
+        total_seconds=3600,
+        activity_count=1,
+        block_minutes=15,
+        project=project,
+    )
+    ActivityBlock.objects.create(
+        app_name="Word",
+        date=date(2026, 3, 13),
+        started_at=datetime(2026, 3, 13, 10, 0, tzinfo=timezone.utc),
+        ended_at=datetime(2026, 3, 13, 11, 39, tzinfo=timezone.utc),
+        total_seconds=5940,
+        activity_count=1,
+        block_minutes=15,
+        project=other_project,
+    )
+    assert project.total_minutes() == 60.0
+    assert other_project.total_minutes() == 99.0
 
 
 def test_project_name_unique(project):
+    """Project names should be unique."""
     with pytest.raises(Exception):
         Project.objects.create(name="Onderzoek", color="#000000")
 
 
-# ── TimeEntry ─────────────────────────────────────────────────────────────────
-
-def test_time_entry_str(time_entry):
-    assert "Onderzoek" in str(time_entry)
-    assert "2026-03-13" in str(time_entry)
-    assert "1u 30" in str(time_entry)
-
-
-def test_time_entry_duration_hours(time_entry):
-    assert time_entry.duration_hours == 1.5
-
-
-def test_time_entry_duration_hours_rounding(project):
-    entry = TimeEntry.objects.create(
-        project=project,
-        date=date(2026, 3, 13),
-        duration_minutes=100,
-    )
-    assert entry.duration_hours == 1.67
-
-
-def test_time_entry_zero_minutes_not_allowed(project):
-    with pytest.raises(Exception):
-        entry = TimeEntry(project=project, date=date(2026, 3, 13), duration_minutes=0)
-        entry.full_clean()
-
-
-def test_time_entry_project_protect_on_delete(time_entry, project):
-    """Project mag niet verwijderd worden zolang er TimeEntries aan hangen."""
-    from django.db.models import ProtectedError
-    with pytest.raises(ProtectedError):
-        project.delete()
-
-
-# ── ActivityMapping ───────────────────────────────────────────────────────────
-
-def test_activity_mapping_str(time_entry, unique_activity):
-    mapping = ActivityMapping.objects.create(
-        unique_activity=unique_activity,
-        time_entry=time_entry,
-        source=ActivityMapping.SOURCE_RULE,
-    )
-    assert "Zotero" in str(mapping)
-    assert "Onderzoek" in str(mapping)
-
-
-def test_activity_mapping_source_default(activity, time_entry, unique_activity):
-    mapping = ActivityMapping.objects.create(
-        unique_activity=unique_activity,
-        time_entry=time_entry,
-    )
-    assert mapping.source == ActivityMapping.SOURCE_RULE
-
-
-def test_activity_mapping_manual_source(activity, time_entry, unique_activity):
-    mapping = ActivityMapping.objects.create(
-        unique_activity=unique_activity,
-        time_entry=time_entry,
-        source=ActivityMapping.SOURCE_MANUAL,
-    )
-    assert mapping.source == ActivityMapping.SOURCE_MANUAL
-
-
-def test_activity_mapping_unique_together(activity, time_entry, unique_activity):
-    """Dezelfde activiteit mag maar één keer aan dezelfde TimeEntry hangen."""
-    ActivityMapping.objects.create(unique_activity=unique_activity, time_entry=time_entry)
-    with pytest.raises(Exception):
-        ActivityMapping.objects.create(unique_activity=unique_activity, time_entry=time_entry)
-
-
-def test_activity_mapping_same_activity_different_entries(activity, project, unique_activity):
-    """Dezelfde activiteit mag wel aan twee verschillende TimeEntries hangen."""
-    entry1 = TimeEntry.objects.create(project=project, date=date(2026, 3, 13), duration_minutes=30)
-    entry2 = TimeEntry.objects.create(project=project, date=date(2026, 3, 13), duration_minutes=30)
-    ActivityMapping.objects.create(unique_activity=unique_activity, time_entry=entry1)
-    ActivityMapping.objects.create(unique_activity=unique_activity, time_entry=entry2)
-    assert ActivityMapping.objects.count() == 2
-
-
-# ── API Fixtures ───────────────────────────────────────────────────────────────
+# ── API: ProjectViewSet ────────────────────────────────────────────────────────
 
 @pytest.fixture
 def api_client():
     return APIClient()
 
-
-# ── API: ProjectViewSet ────────────────────────────────────────────────────────
 
 @pytest.mark.django_db
 def test_project_list(api_client, project):
@@ -245,137 +198,8 @@ def test_project_update(api_client, project):
 
 @pytest.mark.django_db
 def test_project_delete(api_client, project):
-    """DELETE to remove a project (should fail if has time entries)."""
+    """DELETE to remove a project (should work if no activity blocks)."""
     response = api_client.delete(f"/api/projects/{project.id}/")
     assert response.status_code == 204
     assert Project.objects.count() == 0
 
-
-# ── API: TimeEntryViewSet ──────────────────────────────────────────────────────
-
-@pytest.mark.django_db
-def test_time_entry_list(api_client, time_entry):
-    """GET /api/time-entries/ should return all entries."""
-    response = api_client.get("/api/time-entries/")
-    assert response.status_code == 200
-    assert response.data["count"] == 1
-
-
-@pytest.mark.django_db
-def test_time_entry_detail(api_client, time_entry):
-    """GET /api/time-entries/{id}/ should return entry with computed fields."""
-    response = api_client.get(f"/api/time-entries/{time_entry.id}/")
-    assert response.status_code == 200
-    assert response.data["duration_minutes"] == 90
-    assert response.data["duration_hours"] == 1.5
-    assert response.data["project_name"] == "Onderzoek"
-
-
-@pytest.mark.django_db
-def test_time_entry_filter_by_project(api_client, time_entry, project):
-    """Filter time entries by project."""
-    response = api_client.get(f"/api/time-entries/?project={project.id}")
-    assert response.status_code == 200
-    assert response.data["count"] == 1
-
-
-@pytest.mark.django_db
-def test_time_entry_filter_by_date(api_client, time_entry):
-    """Filter time entries by date."""
-    response = api_client.get("/api/time-entries/?date=2026-03-13")
-    assert response.status_code == 200
-    assert response.data["count"] == 1
-
-
-@pytest.mark.django_db
-def test_time_entry_create(api_client, project):
-    """POST to create a new time entry."""
-    data = {
-        "project": project.id,
-        "date": "2026-03-14",
-        "duration_minutes": 120,
-        "notes": "Development work",
-    }
-    response = api_client.post("/api/time-entries/", data)
-    assert response.status_code == 201
-    assert TimeEntry.objects.count() == 1
-
-
-@pytest.mark.django_db
-def test_time_entry_update(api_client, time_entry):
-    """PATCH to update time entry."""
-    data = {"duration_minutes": 120}
-    response = api_client.patch(f"/api/time-entries/{time_entry.id}/", data)
-    assert response.status_code == 200
-    time_entry.refresh_from_db()
-    assert time_entry.duration_minutes == 120
-
-
-# ── API: ActivityMappingViewSet ────────────────────────────────────────────────
-
-@pytest.mark.django_db
-def test_activity_mapping_list(api_client, time_entry, unique_activity):
-    """GET /api/activity-mappings/ should return all mappings."""
-    mapping = ActivityMapping.objects.create(
-        unique_activity=unique_activity,
-        time_entry=time_entry,
-        source=ActivityMapping.SOURCE_RULE,
-    )
-    response = api_client.get("/api/activity-mappings/")
-    assert response.status_code == 200
-    assert response.data["count"] == 1
-
-
-@pytest.mark.django_db
-def test_activity_mapping_detail(api_client, time_entry, unique_activity):
-    """GET /api/activity-mappings/{id}/ should return mapping with nested info."""
-    mapping = ActivityMapping.objects.create(
-        unique_activity=unique_activity,
-        time_entry=time_entry,
-        source=ActivityMapping.SOURCE_RULE,
-    )
-    response = api_client.get(f"/api/activity-mappings/{mapping.id}/")
-    assert response.status_code == 200
-    assert response.data["activity_app"] == "Zotero"
-    assert response.data["time_entry_project"] == "Onderzoek"
-    assert response.data["source_display"] == "Automatisch (regel)"
-
-
-@pytest.mark.django_db
-def test_activity_mapping_filter_by_source(api_client, time_entry, unique_activity):
-    """Filter mappings by source."""
-    ActivityMapping.objects.create(
-        unique_activity=unique_activity,
-        time_entry=time_entry,
-        source=ActivityMapping.SOURCE_RULE,
-    )
-    response = api_client.get(f"/api/activity-mappings/?source={ActivityMapping.SOURCE_RULE}")
-    assert response.status_code == 200
-    assert response.data["count"] == 1
-
-
-@pytest.mark.django_db
-def test_activity_mapping_create(api_client, time_entry, unique_activity):
-    """POST to create a new activity mapping."""
-    data = {
-        "unique_activity": unique_activity.id,
-        "time_entry": time_entry.id,
-        "source": ActivityMapping.SOURCE_MANUAL,
-    }
-    response = api_client.post("/api/activity-mappings/", data)
-    assert response.status_code == 201
-    assert ActivityMapping.objects.count() == 1
-
-
-@pytest.mark.django_db
-def test_activity_mapping_create_duplicate_fails(api_client, time_entry, unique_activity):
-    """Creating duplicate mapping should fail."""
-    ActivityMapping.objects.create(unique_activity=unique_activity, time_entry=time_entry)
-    data = {
-        "unique_activity": unique_activity.id,
-        "time_entry": time_entry.id,
-        "source": ActivityMapping.SOURCE_MANUAL,
-    }
-    response = api_client.post("/api/activity-mappings/", data)
-    # Should fail with 400 Bad Request due to unique_together constraint
-    assert response.status_code == 400

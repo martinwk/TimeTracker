@@ -15,15 +15,32 @@ db.sqlite3
 .env
 local_settings.py
 
-# IDE
+# Editor directories and files (IDE)
 .vscode/
-.idea/
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Vue / Node (voor later)
-node_modules/
-dist/
-.env.local
+# Vue / Node
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+*.local
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*

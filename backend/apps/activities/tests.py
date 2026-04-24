@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import pytest
 from rest_framework.test import APIClient
 
-from activities.models import WindowActivity, ActivityBlock, UniqueActivity, ActivityRule, detect_noise, extract_app_name
+from apps.activities.models import WindowActivity, ActivityBlock, UniqueActivity, ActivityRule, detect_noise, extract_app_name
 
 
 # ── extract_app_name ─────────────────────────────────────────────────────────
@@ -292,7 +292,7 @@ def test_unique_activity_filter_by_block(api_client, unique_activity, activity_b
 
 @pytest.fixture
 def project_for_rule(db):
-    from projects.models import Project
+    from apps.projects.models import Project
     return Project.objects.create(name="Test Project", color="#000000")
 
 

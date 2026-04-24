@@ -93,7 +93,7 @@ logger = logging.getLogger(__name__)
 
 def import_parsed_lines(lines: Iterator[ParsedLine]) -> ImportResult:
     from django.utils import timezone as django_tz
-    from activities.models import WindowActivity
+    from apps.activities.models import WindowActivity
 
     imported = 0
     skipped_duplicates = 0

@@ -11,7 +11,7 @@ from datetime import datetime
 
 from django.core.management.base import BaseCommand, CommandError
 
-from activities.rule_engine import apply_rules
+from apps.activities.rule_engine import apply_rules
 
 
 class Command(BaseCommand):

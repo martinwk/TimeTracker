@@ -7,8 +7,8 @@ from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter
 
-from activities.importer import import_parsed_lines, parse_stream
-from activities.rule_engine import apply_rules
+from apps.activities.importer import import_parsed_lines, parse_stream
+from apps.activities.rule_engine import apply_rules
 from .models import WindowActivity, ActivityBlock, UniqueActivity, ActivityRule
 from .serializers import (
     WindowActivitySerializer,

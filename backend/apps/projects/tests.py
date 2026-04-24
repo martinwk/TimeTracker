@@ -8,8 +8,8 @@ from datetime import date, datetime, timezone
 import pytest
 from rest_framework.test import APIClient
 
-from activities.models import ActivityBlock, WindowActivity
-from projects.models import Project
+from apps.activities.models import ActivityBlock, WindowActivity
+from apps.projects.models import Project
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────

@@ -22,8 +22,8 @@ from datetime import date, datetime
 
 from django.core.management.base import BaseCommand, CommandError
 
-from activities.aggregator import DEFAULT_BLOCK_MINUTES, aggregate_day, aggregate_range
-from activities.models import WindowActivity
+from apps.activities.aggregator import DEFAULT_BLOCK_MINUTES, aggregate_day, aggregate_range
+from apps.activities.models import WindowActivity
 
 
 class Command(BaseCommand):

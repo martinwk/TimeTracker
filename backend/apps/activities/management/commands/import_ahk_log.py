@@ -11,7 +11,7 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 
-from activities.importer import ImportResult, import_parsed_lines, parse_file
+from apps.activities.importer import ImportResult, import_parsed_lines, parse_file
 
 
 class Command(BaseCommand):

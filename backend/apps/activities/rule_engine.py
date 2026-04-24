@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Optional
 
-from activities.models import ActivityRule, ActivityBlock, UniqueActivity
+from apps.activities.models import ActivityRule, ActivityBlock, UniqueActivity
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +87,7 @@ def apply_rules(
                     if project:
                         block.project = project
                         block.save(update_fields=["project"])
-                        from activities.models import BlockProjectHistory
+                        from apps.activities.models import BlockProjectHistory
                         BlockProjectHistory.objects.create(
                             block=block,
                             project=project,
@@ -96,7 +96,7 @@ def apply_rules(
                         blocks_assigned += 1
                         matched_rule = rule
                         break
-            
+
             elif rule.match_field == "recent_project":
                 # Check if recent project exists for this app
                 val = rule.match_value.lower()
@@ -105,7 +105,7 @@ def apply_rules(
                     if project:
                         block.project = project
                         block.save(update_fields=["project"])
-                        from activities.models import BlockProjectHistory
+                        from apps.activities.models import BlockProjectHistory
                         BlockProjectHistory.objects.create(
                             block=block,
                             project=project,
@@ -114,7 +114,7 @@ def apply_rules(
                         blocks_assigned += 1
                         matched_rule = rule
                         break
-            
+
             else:
                 # Standard rules: app_name, title_contains, etc.
                 window_activity = block.unique_activities.first().occurrences.first()
@@ -122,8 +122,8 @@ def apply_rules(
                     matched_rule = rule
                     block.project = rule.project
                     block.save(update_fields=["project"])
-                    
-                    from activities.models import BlockProjectHistory
+
+                    from apps.activities.models import BlockProjectHistory
                     BlockProjectHistory.objects.create(
                         block=block,
                         project=rule.project,

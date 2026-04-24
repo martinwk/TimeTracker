@@ -114,7 +114,7 @@ def aggregate_day(target_date: date, block_minutes: int = DEFAULT_BLOCK_MINUTES)
     worden de bestaande ActivityBlocks verwijderd (cascade verwijdert
     UniqueActivity mee), en dan wordt alles opnieuw opgebouwd.
     """
-    from activities.models import ActivityBlock, UniqueActivity, WindowActivity
+    from apps.activities.models import ActivityBlock, UniqueActivity, WindowActivity
 
     # Reset FK op WindowActivity voor deze dag zodat SET_NULL niet
     # achterblijft als wees na het verwijderen van de blokken
@@ -188,7 +188,7 @@ def aggregate_day(target_date: date, block_minutes: int = DEFAULT_BLOCK_MINUTES)
 
     # Voer rules toe voor deze dag
     logger.info("%s: Activityrules toepassen...", target_date)
-    from activities.rule_engine import apply_rules
+    from apps.activities.rule_engine import apply_rules
     rules_result = apply_rules(date_from=target_date, date_to=target_date)
     logger.info(
         "%s: %d blokken toegewezen via regels, %d handmatig ingesteld overgeslagen",

@@ -15,6 +15,5 @@ router = DefaultRouter()
 router.register(r"", ProjectViewSet, basename="project")
 
 urlpatterns = [
-    path("", projects_root, name="projects-root"),
     path("", include(router.urls)),
 ]

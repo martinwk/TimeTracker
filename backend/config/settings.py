@@ -24,8 +24,8 @@ INSTALLED_APPS = [
     "django_filters",
     "corsheaders",
     # Eigen apps
-    "activities",
-    "projects",
+    "apps.activities",
+    "apps.projects",
 ]
 
 MIDDLEWARE = [

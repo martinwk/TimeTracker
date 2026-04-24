@@ -14,9 +14,9 @@ from datetime import date, datetime, timezone
 
 import pytest
 
-from activities.models import ActivityBlock, UniqueActivity, WindowActivity, ActivityRule
-from activities.rule_engine import apply_rules
-from projects.models import Project
+from apps.activities.models import ActivityBlock, UniqueActivity, WindowActivity, ActivityRule
+from apps.activities.rule_engine import apply_rules
+from apps.projects.models import Project
 
 
 # ── Fixtures ───────────────────────────────────────────────────────────────
@@ -392,7 +392,7 @@ def test_recent_project_rule(project_research, project_admin):
         block_minutes=15,
         project=project_research,
     )
-    
+
     # Create a rule: recent_project for VSCode
     recent_rule = ActivityRule.objects.create(
         project=project_admin,  # Not used, just for rule config
@@ -401,7 +401,7 @@ def test_recent_project_rule(project_research, project_admin):
         priority=15,
         is_active=True,
     )
-    
+
     # Create new unassigned block with same app
     new_block = ActivityBlock.objects.create(
         app_name="VSCode",
@@ -426,10 +426,10 @@ def test_recent_project_rule(project_research, project_admin):
     wa.date = date(2026, 3, 15)
     wa.unique_activity = ua
     wa.save()
-    
+
     result = apply_rules()
     assert result.blocks_assigned == 1
-    
+
     # New block should get project_research (recent project for VSCode)
     new_block.refresh_from_db()
     assert new_block.project == project_research
@@ -454,7 +454,7 @@ def test_dominant_activity_rule(project_research, project_admin):
         raw_title="Literature Review - Word",
         total_seconds=3600,
     )
-    
+
     # Create rule for dominant_activity
     dom_rule = ActivityRule.objects.create(
         project=project_admin,  # Not used
@@ -463,7 +463,7 @@ def test_dominant_activity_rule(project_research, project_admin):
         priority=12,
         is_active=True,
     )
-    
+
     # Create new unassigned block with same dominant activity
     new_block = ActivityBlock.objects.create(
         app_name="Word",
@@ -488,10 +488,10 @@ def test_dominant_activity_rule(project_research, project_admin):
     wa.date = date(2026, 3, 15)
     wa.unique_activity = new_ua
     wa.save()
-    
+
     result = apply_rules()
     assert result.blocks_assigned == 1
-    
+
     # New block should get project_research (used for this activity title)
     new_block.refresh_from_db()
     assert new_block.project == project_research
@@ -500,8 +500,8 @@ def test_dominant_activity_rule(project_research, project_admin):
 @pytest.mark.django_db
 def test_history_tracked_on_assignment(project_research, activity_block, unique_activity_zotero, window_activity_for_zotero):
     """Assignment via rule creates BlockProjectHistory entry."""
-    from activities.models import BlockProjectHistory
-    
+    from apps.activities.models import BlockProjectHistory
+
     rule = ActivityRule.objects.create(
         project=project_research,
         match_field="app_name",
@@ -509,14 +509,14 @@ def test_history_tracked_on_assignment(project_research, activity_block, unique_
         priority=10,
         is_active=True,
     )
-    
+
     apply_rules()
-    
+
     # Check history was recorded
     history = BlockProjectHistory.objects.filter(block=activity_block)
     assert history.exists()
     assert history.count() == 1
-    
+
     hist_entry = history.first()
     assert hist_entry.project == project_research
     assert hist_entry.assigned_by == "rule"

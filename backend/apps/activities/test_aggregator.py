@@ -2,13 +2,13 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from activities.aggregator import (
+from apps.activities.aggregator import (
     DEFAULT_BLOCK_MINUTES,
     _build_blocks_for_day,
     _OpenBlock,
     aggregate_day,
 )
-from activities.models import ActivityBlock, WindowActivity
+from apps.activities.models import ActivityBlock, WindowActivity
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

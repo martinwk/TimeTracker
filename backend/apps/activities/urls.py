@@ -30,7 +30,6 @@ router.register(r"unique-activities", UniqueActivityViewSet, basename="unique-ac
 router.register(r"activity-rules", ActivityRuleViewSet, basename="activity-rule")
 
 urlpatterns = [
-    path("", activities_root, name="activities-root"),
     path("", include(router.urls)),
     path("import/", ImportAhkLogView.as_view(), name="import-ahk-log"),
     path("apply-rules/", ApplyRulesView.as_view(), name="apply-rules"),

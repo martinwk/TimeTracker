@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from typing import Iterator
 
-from activities.importer import (
+from apps.activities.importer import (
     ImportResult,
     ParsedLine,
     import_parsed_lines,
@@ -121,7 +121,7 @@ def test_import_skips_duplicates():
 
 @pytest.mark.django_db
 def test_import_marks_noise():
-    from activities.models import WindowActivity
+    from apps.activities.models import WindowActivity
     lines = [make_line("Idle", 0), make_line("Firefox", 10)]
     import_parsed_lines(iter(lines))
     assert WindowActivity.objects.filter(is_noise=True).count() == 1
@@ -149,7 +149,7 @@ def import_parsed_lines(lines: Iterator[ParsedLine]) -> ImportResult:
     """
     from django.utils import timezone as django_tz
 
-    from activities.models import WindowActivity
+    from apps.activities.models import WindowActivity
 
     imported = 0
     skipped_duplicates = 0
@@ -189,7 +189,7 @@ def import_parsed_lines(lines: Iterator[ParsedLine]) -> ImportResult:
 @pytest.mark.django_db
 def test_reimport_same_file_no_duplicates(tmp_path):
     """Hetzelfde bestand twee keer importeren geeft geen dubbele records."""
-    from activities.models import WindowActivity
+    from apps.activities.models import WindowActivity
 
     log = tmp_path / "window_log.txt"
     log.write_text(
@@ -211,7 +211,7 @@ def test_reimport_same_file_no_duplicates(tmp_path):
 @pytest.mark.django_db
 def test_reimport_partial_overlap(tmp_path):
     """Bestand met deels nieuwe, deels bekende regels."""
-    from activities.models import WindowActivity
+    from apps.activities.models import WindowActivity
 
     log_week11 = tmp_path / "week11.txt"
     log_week11.write_text(
@@ -239,7 +239,7 @@ def test_reimport_partial_overlap(tmp_path):
 @pytest.mark.django_db
 def test_reimport_same_title_different_time_is_not_duplicate(tmp_path):
     """Zelfde venstertitel op een ander tijdstip is geen duplicaat."""
-    from activities.models import WindowActivity
+    from apps.activities.models import WindowActivity
 
     log = tmp_path / "window_log.txt"
     log.write_text(

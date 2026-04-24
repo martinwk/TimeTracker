@@ -183,16 +183,16 @@ class ActivityBlock(models.Model):
     def get_recent_project_for_app(self, days_back=30):
         """
         Geeft het meest recent toegewezen project voor hetzelfde app_name.
-        
+
         Args:
             days_back: Hoeveel dagen terug zoeken in de geschiedenis.
-        
+
         Returns:
             Project object of None.
         """
         from datetime import timedelta
         from django.utils import timezone
-        
+
         cutoff_date = self.date - timedelta(days=days_back)
         recent_block = ActivityBlock.objects.filter(
             app_name=self.app_name,
@@ -200,24 +200,24 @@ class ActivityBlock(models.Model):
             date__gte=cutoff_date,
             date__lt=self.date,
         ).order_by("-date").first()
-        
+
         return recent_block.project if recent_block else None
 
     def get_project_for_dominant_activity(self):
         """
         Geeft het project dat eerder aan deze dominant activity title
         werd gekoppeld (meest voorkomend project in geschiedenis).
-        
+
         Returns:
             Project object of None.
         """
         dominant = self.dominant_title
         if not dominant:
             return None
-        
+
         # Find all blocks with same dominant title that have a project
         from django.db.models import Count
-        
+
         history = ActivityBlock.objects.filter(
             unique_activities__raw_title=dominant,
             project__isnull=False,
@@ -225,9 +225,9 @@ class ActivityBlock(models.Model):
         ).values("project").annotate(
             count=Count("project")
         ).order_by("-count").first()
-        
+
         if history:
-            from projects.models import Project
+            from apps.projects.models import Project
             return Project.objects.get(pk=history["project"])
         return None
 
@@ -372,12 +372,12 @@ class ActivityRule(models.Model):
 class BlockProjectHistory(models.Model):
     """
     Geschiedenis van project-toewijzingen aan activity blocks.
-    
+
     Gebruikt om intelligent project-suggestions te genereren op basis van:
     - Hoe vaak een project voor een bepaalde app wordt gebruikt
     - Hoe recent een project voor een app is gebruikt
     - Welk project het meest voorkomt voor een bepaalde activity title
-    
+
     Dit model wordt automatisch gevuld als blocks een project krijgen
     (via regel of handmatig).
     """

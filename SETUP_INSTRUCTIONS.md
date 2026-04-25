@@ -567,6 +567,21 @@ Klik de knoppen. Het getal verandert! 🎉
 ---
 
 ## STAP 16: Communiceer met Django API
+<span style="color:red">
+
+**>>>>>>>>>>>>>>>>**
+
+**HIER BEN IK GEBLEVEN**
+
+**HIER BEN IK GEBLEVEN**
+
+**HIER BEN IK GEBLEVEN**
+
+**HIER BEN IK GEBLEVEN**
+
+**<<<<<<<<<<<<<<<<**
+
+</span>
 
 Nu gaat het interessant! We gaan data van Django halen.
 

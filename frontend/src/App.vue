@@ -1,46 +1,42 @@
 <template>
   <div class="flex">
-    <!-- Sidebar links -->
     <Sidebar />
 
-    <!-- Inhoud rechts -->
     <main class="flex-1 bg-gray-100 p-8">
       <h1 class="text-4xl font-bold text-blue-600">
         🎉 TimeTracker Vue App
       </h1>
-      <p class="text-gray-700 mt-4">
-        Hello World! Ik ben aan het leren met Vue.
-      </p>
 
-      <!-- NIEUWE CODE: Counter -->
+      <!-- Projects Section -->
       <div class="mt-8 bg-white p-6 rounded-lg shadow">
-        <h2 class="text-2xl font-bold mb-4">Counter Example</h2>
+        <h2 class="text-2xl font-bold mb-4">Projects from Django</h2>
 
-        <!-- Toon het getal -->
-        <p class="text-xl mb-4">
-          Counter: <span class="font-bold text-blue-600">{{ count }}</span>
-        </p>
+        <!-- Loading indicator -->
+        <div v-if="loading" class="text-gray-600">
+          Loading projects...
+        </div>
 
-        <!-- Knoppen om het getal te veranderen -->
-        <div class="flex gap-4">
-          <button
-            @click="count = count + 1"
-            class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+        <!-- Error message -->
+        <div v-if="error" class="text-red-600">
+          Error: {{ error }}
+        </div>
+
+        <!-- Projects list -->
+        <div v-if="!loading && projects.length > 0" class="space-y-3">
+          <div
+            v-for="project in projects"
+            :key="project.id"
+            class="p-4 border border-gray-300 rounded"
           >
-            + Increment
-          </button>
-          <button
-            @click="count = count - 1"
-            class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-          >
-            - Decrement
-          </button>
-          <button
-            @click="count = 0"
-            class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
-          >
-            Reset
-          </button>
+            <h3 class="font-bold text-lg">{{ project.name }}</h3>
+            <p class="text-sm text-gray-600">Color: {{ project.color }}</p>
+            <p class="text-sm text-gray-600">Active: {{ project.is_active }}</p>
+          </div>
+        </div>
+
+        <!-- No projects -->
+        <div v-if="!loading && projects.length === 0" class="text-gray-600">
+          No projects found
         </div>
       </div>
     </main>
@@ -48,11 +44,34 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'  // ← Import ref
+import { ref, onMounted } from 'vue'
 import Sidebar from './components/Sidebar.vue'
+import { getProjects } from './api/projects'
 
-// STATE: een getal dat kan veranderen
-const count = ref(0)
+// STATE
+const projects = ref([])  // Lege array (gaat gevuld worden)
+const loading = ref(false)  // Zijn we aan het laden?
+const error = ref(null)  // Error message
+
+// FUNCTIE: Fetch projects van Django
+async function loadProjects() {
+  loading.value = true
+  error.value = null
+
+  try {
+    const data = await getProjects()
+    projects.value = data
+  } catch (err) {
+    error.value = err.message
+  } finally {
+    loading.value = false  // Finally = altijd, loading of error
+  }
+}
+
+// onMounted = "Als component geladen is, voer dan uit"
+onMounted(() => {
+  loadProjects()
+})
 </script>
 
 <style scoped>

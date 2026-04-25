@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  // deze scripts worden gebruikt door npm, bijvoorbeeld "npm run dev" zoekt naar
+  // het script "dev". in dit geval vind hij vite en gebruikt dus
+  // vite. npm run dev betekent dus als het ware dat hij vite dev moet uitvoeren
   "scripts": {
     "dev": "vite",
     "build": "vite build",

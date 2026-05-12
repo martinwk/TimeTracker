@@ -73,13 +73,14 @@
 
           <!-- Blokken -->
           <ActivityBlock
-            v-for="block in blocksByDay[day.iso] ?? []"
-            :key="block.id"
-            :block="block"
-            :is-selected="selectedBlocks.includes(block.id)"
-            :hour-height="hourHeight"
-            @toggle="store.toggleBlock"
-          />
+             v-for="group in mergedBlocksByDay[day.iso] ?? []"
+             :key="group.blocks[0].id"
+             :blocks="group.blocks"
+             :is-selected="group.blocks.every(b => selectedBlocks.includes(b.id))"
+             :hour-height="hourHeight"
+             @toggle="store.toggleBlock"
+             @toggle-many="store.toggleMany"
+           />
         </div>
 
       </div>
@@ -113,7 +114,7 @@ const gridCols = computed(() => ({
 }))
 
 const selectedBlocks = computed(() => store.selectedBlocks)
-const blocksByDay = computed(() => store.blocksByDay)
+const mergedBlocksByDay = computed(() => store.mergedBlocksByDay)
 
 const daysOfWeek = computed(() => {
   const todayStr = new Date().toISOString().split('T')[0]

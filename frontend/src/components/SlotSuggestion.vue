@@ -10,7 +10,7 @@
     <div class="mb-3">
       <div class="text-[11px] text-gray-400 mb-1">Suggestie</div>
             <button v-for="suggestion in suggestions" :key="suggestion.id"
-                @click="() => { console.log('project geklikt', suggestion.id); emit('create', { projectId: suggestion.id, slotInfo }) }"
+                @click="() => { emit('create', { projectId: suggestion.id, slotInfo }) }"
                 class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 transition-colors text-left mb-1">
 
         <span class="w-2.5 h-2.5 rounded-full shrink-0" :style="{ backgroundColor: suggestion.color }" />
@@ -25,7 +25,7 @@
       <button
         v-for="project in otherProjects"
         :key="project.id"
-        @click="() => { console.log('project geklikt', project.id); emit('create', { projectId: project.id, slotInfo }) }"
+        @click="() => { emit('create', { projectId: project.id, slotInfo }) }"
         class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 transition-colors text-left"
       >
         <span class="w-2.5 h-2.5 rounded-full shrink-0" :style="{ backgroundColor: project.color }" />
@@ -65,7 +65,4 @@ const timeLabel = computed(() => {
 const suggestions = computed(() => store.projects.slice(0, 1))
 const otherProjects = computed(() => store.projects.slice(1))
 
-onMounted(() => {
-  console.log('SlotSuggestion gemount', props.slotInfo)
-})
 </script>

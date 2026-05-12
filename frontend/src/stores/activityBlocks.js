@@ -87,11 +87,49 @@ const blocksByDay = computed(() => {
   return map
 })
 
+const mergedBlocksByDay = computed(() => {
+  const result = {}
+  for (const [day, dayBlocks] of Object.entries(blocksByDay.value)) {
+    const sorted = [...dayBlocks].sort((a, b) =>
+      parseLocalDate(a.started_at) - parseLocalDate(b.started_at)
+    )
+    const merged = []
+    let group = null
+    for (const block of sorted) {
+      const bDate = parseLocalDate(block.started_at)
+      const bStart = bDate.getHours() * 60 + bDate.getMinutes()
+      const bEnd = bStart + Math.round(block.total_seconds / 60)
+      const projectId = block.project?.id ?? null
+      if (group && projectId !== null && projectId === group.projectId && bStart <= group.endMin) {
+        group.blocks.push(block)
+        group.endMin = Math.max(group.endMin, bEnd)
+      } else {
+        if (group) merged.push(group)
+        group = { blocks: [block], projectId, endMin: bEnd }
+      }
+    }
+    if (group) merged.push(group)
+    result[day] = merged
+  }
+  return result
+})
+
   // ── Actions ────────────────────────────────────────────────────────────────
   const toggleBlock = (blockId) => {
     const idx = selectedBlocks.value.indexOf(blockId)
     if (idx >= 0) selectedBlocks.value.splice(idx, 1)
     else selectedBlocks.value.push(blockId)
+  }
+
+  const toggleMany = (blockIds) => {
+ const allSelected = blockIds.every(id => selectedBlocks.value.includes(id))
+ if (allSelected) {
+   selectedBlocks.value = selectedBlocks.value.filter(id => !blockIds.includes(id))
+ } else {
+   for (const id of blockIds) {
+     if (!selectedBlocks.value.includes(id)) selectedBlocks.value.push(id)
+   }
+ }
   }
 
   const selectAll = () => {
@@ -242,7 +280,7 @@ const blocksByDay = computed(() => {
 
   return {
     blocks, projects, selectedBlocks, currentDate,
-    isLoading, error, unassignedBlocks, blocksByDay,
+    isLoading, error, unassignedBlocks, blocksByDay, mergedBlocksByDay,
     toggleBlock, selectAll, selectUnassigned, clearSelection, selectOrCreateRange,
     fetchWeekBlocks, createBlock, assignToProject, applyRules,
     goToPrevWeek, goToNextWeek,

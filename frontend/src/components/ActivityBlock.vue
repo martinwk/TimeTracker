@@ -1,20 +1,20 @@
 <template>
   <div
-    class="absolute left-0.5 right-0.5 rounded overflow-hidden cursor-pointer transition-all duration-100 group"
+    class="absolute left-0.5 right-0.5 rounded overflow-hidden cursor-pointer transition-all duration-100"
     :class="[
       isSelected
         ? 'ring-2 ring-blue-500 ring-offset-1 z-20'
         : 'hover:ring-1 hover:ring-blue-300 hover:z-10 z-0',
     ]"
     :style="style"
-    @click.stop="emit('toggle', block.id)"
-    :title="block.dominant_title"
+    @click.stop="onToggle"
+    :title="displayTitle"
   >
     <!-- Project kleurstreep links -->
     <div
-      v-if="block.project"
+      v-if="project"
       class="absolute left-0 top-0 bottom-0 w-1 shrink-0"
-      :style="{ backgroundColor: block.project.color }"
+      :style="{ backgroundColor: project.color }"
     />
 
     <!-- Inhoud -->
@@ -22,13 +22,16 @@
       <span
         v-if="isLargeEnough"
         class="text-[10px] leading-tight font-medium truncate"
-        :class="block.project ? 'text-gray-800' : 'text-gray-500'"
+        :class="project ? 'text-gray-800' : 'text-gray-500'"
       >
-        {{ block.dominant_title }}
+        {{ displayTitle }}
       </span>
-      <span class="text-[9px] leading-none text-gray-400 self-end">
-        {{ formatDuration(block.total_seconds) }}
-      </span>
+      <div class="flex items-center justify-end gap-1">
+        <span v-if="props.blocks && props.blocks.length > 1" class="text-[9px] text-gray-300">{{ props.blocks.length }}×</span>
+        <span class="text-[9px] leading-none text-gray-400">
+          {{ formatDuration(totalSeconds) }}
+        </span>
+      </div>
     </div>
   </div>
 </template>
@@ -38,26 +41,48 @@ import { computed } from 'vue'
 import { parseLocalDate } from '@/utils/date'
 
 const props = defineProps({
-  block: { type: Object, required: true },
+  // Enkelvoudig blok (backwards compat) of samengevoegd blok
+  block: { type: Object, default: null },
+  // Samengevoegde blokken — als dit meegegeven wordt, is het een merged blok
+  blocks: { type: Array, default: null },
   isSelected: { type: Boolean, default: false },
   hourHeight: { type: Number, required: true },
 })
 
-const emit = defineEmits(['toggle'])
+const emit = defineEmits(['toggle', 'toggleMany'])
 
-const MINUTES_PER_PX = 60 // hourHeight pixels = 60 minutes
+// Gebruik blocks array als aanwezig, anders enkelvoudig block
+const isMerged = computed(() => !!props.blocks && props.blocks.length > 1)
+const primaryBlock = computed(() =>
+  props.blocks ? props.blocks[0] : props.block
+)
+const project = computed(() => primaryBlock.value?.project ?? null)
+const displayTitle = computed(() => project.value?.name ?? primaryBlock.value?.dominant_title ?? '')
+const totalSeconds = computed(() =>
+  props.blocks
+    ? props.blocks.reduce((sum, b) => sum + b.total_seconds, 0)
+    : props.block.total_seconds
+)
 
+// Positie en hoogte op basis van eerste en laatste blok
 const style = computed(() => {
-  const start = parseLocalDate(props.block.started_at)
+  const first = primaryBlock.value
+  const start = parseLocalDate(first.started_at)
   const minutesFromMidnight = start.getHours() * 60 + start.getMinutes()
   const top = (minutesFromMidnight / 60) * props.hourHeight
 
-  const durationMin = props.block.total_seconds / 60
-  const height = Math.max((durationMin / 60) * props.hourHeight, 12)
+  let durationMin
+  if (isMerged.value) {
+    const last = props.blocks[props.blocks.length - 1]
+    const lastStart = parseLocalDate(last.started_at)
+    const lastMinutes = lastStart.getHours() * 60 + lastStart.getMinutes()
+    durationMin = lastMinutes + last.total_seconds / 60 - minutesFromMidnight
+  } else {
+    durationMin = totalSeconds.value / 60
+  }
 
-  const bg = props.block.project
-    ? props.block.project.color + '28'  // 16% opacity
-    : '#f1f5f9'
+  const height = Math.max((durationMin / 60) * props.hourHeight, 12)
+  const bg = project.value ? project.value.color + '28' : '#f1f5f9'
 
   return {
     top: top + 'px',
@@ -66,11 +91,18 @@ const style = computed(() => {
   }
 })
 
-// Toon titel pas als blok hoog genoeg is
 const isLargeEnough = computed(() => {
-  const durationMin = props.block.total_seconds / 60
+  const durationMin = totalSeconds.value / 60
   return (durationMin / 60) * props.hourHeight >= 22
 })
+
+const onToggle = () => {
+  if (props.blocks) {
+    emit('toggleMany', props.blocks.map(b => b.id))
+  } else {
+    emit('toggle', props.block.id)
+  }
+}
 
 const formatDuration = (seconds) => {
   const m = Math.floor(seconds / 60)

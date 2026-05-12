@@ -1,8 +1,8 @@
 <script setup>
-import { ref } from 'vue';
-import Sidebar from './components/Sidebar.vue';
+import { ref } from 'vue'
+import Sidebar from './components/Sidebar.vue'
 
-const isSidebarOpen = ref(true);
+const isSidebarOpen = ref(true)
 </script>
 
 <template>

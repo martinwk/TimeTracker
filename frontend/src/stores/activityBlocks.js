@@ -56,63 +56,63 @@ function getMonday(dateStr) {
   const day = d.getDay()
   const diff = day === 0 ? -6 : 1 - day
   d.setDate(d.getDate() + diff)
-  return d.toISOString().split('T')[0]
+  return toLocalDateStr(d.toISOString())
 }
 
-// Helper om een lokale datum+tijd te maken zonder tijdzone verschuiving
-export const useActivityBlocksStore = defineStore('activityBlocks', () => {
-  const today = new Date().toISOString().split('T')[0]
+// ── Helpers (ook gebruikt door resizeRange) ────────────────────────────────────
+const blockStartMin = (block) => {
+  const d = parseLocalDate(block.started_at)
+  return d.getHours() * 60 + d.getMinutes()
+}
+const blockEndMin = (block) => blockStartMin(block) + block.total_seconds / 60
 
-  const blocks = ref([])
-  const projects = ref(MOCK_PROJECTS)
+export const useActivityBlocksStore = defineStore('activityBlocks', () => {
+  const today = toLocalDateStr(new Date().toISOString())
+
+  const blocks         = ref([])
+  const projects       = ref(MOCK_PROJECTS)
   const selectedBlocks = ref([])
-  const currentDate = ref(getMonday(today))
-  const isLoading = ref(false)
-  const error = ref(null)
+  const currentDate    = ref(getMonday(today))
+  const isLoading      = ref(false)
+  const error          = ref(null)
 
   // ── Computed ───────────────────────────────────────────────────────────────
   const unassignedBlocks = computed(() =>
     blocks.value.filter(b => !b.project)
   )
 
-const blocksByDay = computed(() => {
-  const map = {}
-  for (const block of blocks.value) {
-    const d = parseLocalDate(block.started_at)
-    // Gebruik lokale datum, niet UTC
-    const day = toLocalDateStr(block.started_at)
-    if (!map[day]) map[day] = []
-    map[day].push(block)
-  }
-  return map
-})
-
-const mergedBlocksByDay = computed(() => {
-  const result = {}
-  for (const [day, dayBlocks] of Object.entries(blocksByDay.value)) {
-    const sorted = [...dayBlocks].sort((a, b) =>
-      parseLocalDate(a.started_at) - parseLocalDate(b.started_at)
-    )
-    const merged = []
-    let group = null
-    for (const block of sorted) {
-      const bDate = parseLocalDate(block.started_at)
-      const bStart = bDate.getHours() * 60 + bDate.getMinutes()
-      const bEnd = bStart + Math.round(block.total_seconds / 60)
-      const projectId = block.project?.id ?? null
-      if (group && projectId !== null && projectId === group.projectId && bStart <= group.endMin) {
-        group.blocks.push(block)
-        group.endMin = Math.max(group.endMin, bEnd)
-      } else {
-        if (group) merged.push(group)
-        group = { blocks: [block], projectId, endMin: bEnd }
-      }
+  const mergedBlocksByDay = computed(() => {
+    const map = {}
+    for (const block of blocks.value) {
+      const day = toLocalDateStr(block.started_at)
+      if (!map[day]) map[day] = []
+      map[day].push(block)
     }
-    if (group) merged.push(group)
-    result[day] = merged
-  }
-  return result
-})
+
+    const result = {}
+    for (const [day, dayBlocks] of Object.entries(map)) {
+      const sorted = [...dayBlocks].sort((a, b) =>
+        parseLocalDate(a.started_at) - parseLocalDate(b.started_at)
+      )
+      const merged = []
+      let group = null
+      for (const block of sorted) {
+        const bStart    = blockStartMin(block)
+        const bEnd      = blockEndMin(block)
+        const projectId = block.project?.id ?? null
+        if (group && projectId !== null && projectId === group.projectId && bStart <= group.endMin) {
+          group.blocks.push(block)
+          group.endMin = Math.max(group.endMin, bEnd)
+        } else {
+          if (group) merged.push(group)
+          group = { blocks: [block], projectId, endMin: bEnd }
+        }
+      }
+      if (group) merged.push(group)
+      result[day] = merged
+    }
+    return result
+  })
 
   // ── Actions ────────────────────────────────────────────────────────────────
   const toggleBlock = (blockId) => {
@@ -122,14 +122,14 @@ const mergedBlocksByDay = computed(() => {
   }
 
   const toggleMany = (blockIds) => {
- const allSelected = blockIds.every(id => selectedBlocks.value.includes(id))
- if (allSelected) {
-   selectedBlocks.value = selectedBlocks.value.filter(id => !blockIds.includes(id))
- } else {
-   for (const id of blockIds) {
-     if (!selectedBlocks.value.includes(id)) selectedBlocks.value.push(id)
-   }
- }
+    const allSelected = blockIds.every(id => selectedBlocks.value.includes(id))
+    if (allSelected) {
+      selectedBlocks.value = selectedBlocks.value.filter(id => !blockIds.includes(id))
+    } else {
+      for (const id of blockIds) {
+        if (!selectedBlocks.value.includes(id)) selectedBlocks.value.push(id)
+      }
+    }
   }
 
   const selectAll = () => {
@@ -144,46 +144,131 @@ const mergedBlocksByDay = computed(() => {
     selectedBlocks.value = []
   }
 
-  // Selecteer bestaande blokken in een tijdrange, maak nieuwe aan voor lege slots
-    const selectOrCreateRange = (iso, startMin, endMin) => {
-        selectedBlocks.value = []
-        const dayBlocks = blocks.value.filter(b => toLocalDateStr(b.started_at) === iso)
+  const selectOrCreateRange = (iso, startMin, endMin) => {
+    selectedBlocks.value = []
+    const dayBlocks = blocks.value.filter(b => toLocalDateStr(b.started_at) === iso)
 
-        for (let min = startMin; min < endMin; min += 15) {
-            const slotStart = min
-            const slotEnd = min + 15
+    for (let min = startMin; min < endMin; min += 15) {
+      const slotStart = min
+      const slotEnd   = min + 15
 
-            const existing = dayBlocks.find(b => {
-                const bDate = parseLocalDate(b.started_at)
-                const bStart = bDate.getHours() * 60 + bDate.getMinutes()
-                const bEnd = bStart + Math.round(b.total_seconds / 60)
-                return bStart < slotEnd && bEnd > slotStart
-            })
+      const existing = dayBlocks.find(b => {
+        const bStart = blockStartMin(b)
+        const bEnd   = blockEndMin(b)
+        return bStart < slotEnd && bEnd > slotStart
+      })
 
-            if (existing) {
-                break
-            } else {
-                const d = parseLocalDate(iso)
-                d.setHours(Math.floor(slotStart / 60), slotStart % 60, 0, 0)
-                const newBlock = {
-                    id: Date.now() + min,
-                    started_at: d.toISOString(),
-                    total_seconds: 15 * 60,
-                    dominant_title: 'Nieuw blok',
-                    project: null,
-                }
-                blocks.value.push(newBlock)
-                selectedBlocks.value.push(newBlock.id)
-            }
+      if (existing) {
+        break
+      } else {
+        const d = parseLocalDate(iso)
+        d.setHours(Math.floor(slotStart / 60), slotStart % 60, 0, 0)
+        const newBlock = {
+          id:            Date.now() + min,
+          started_at:    d.toISOString(),
+          total_seconds: 15 * 60,
+          dominant_title: 'Nieuw blok',
+          project:       null,
         }
+        blocks.value.push(newBlock)
+        selectedBlocks.value.push(newBlock.id)
+      }
     }
+  }
+
+  // ── resizeRange (ontwerp B) ────────────────────────────────────────────────
+  const resizeRange = (iso, oldStartMin, oldEndMin, newStartMin, newEndMin, projectId) => {
+    const project = projectId != null
+      ? projects.value.find(p => p.id === projectId) ?? null
+      : null
+
+    const groupBlocks = blocks.value.filter(b => {
+      if (toLocalDateStr(b.started_at) !== iso) return false
+      if ((b.project?.id ?? null) !== projectId)  return false
+      const bStart = blockStartMin(b)
+      const bEnd   = blockEndMin(b)
+      return bStart < oldEndMin && bEnd > oldStartMin
+    })
+
+    for (const block of groupBlocks) {
+      const bStart = blockStartMin(block)
+      const bEnd   = blockEndMin(block)
+
+      if (bEnd <= newStartMin || bStart >= newEndMin) {
+        const idx = blocks.value.findIndex(b => b.id === block.id)
+        if (idx >= 0) blocks.value.splice(idx, 1)
+        const selIdx = selectedBlocks.value.indexOf(block.id)
+        if (selIdx >= 0) selectedBlocks.value.splice(selIdx, 1)
+      } else {
+        const clampedStart = Math.max(bStart, newStartMin)
+        const clampedEnd   = Math.min(bEnd,   newEndMin)
+
+        if (clampedStart !== bStart) {
+          const d = parseLocalDate(iso)
+          d.setHours(Math.floor(clampedStart / 60), clampedStart % 60, 0, 0)
+          block.started_at = d.toISOString()
+        }
+        block.total_seconds = (clampedEnd - clampedStart) * 60
+        block.project = project
+
+        if (!selectedBlocks.value.includes(block.id)) {
+          selectedBlocks.value.push(block.id)
+        }
+      }
+    }
+
+    // Nieuwe kwartierblokken voor lege slots binnen de nieuwe range
+    const coveredMins = new Set()
+    for (const b of blocks.value) {
+      if (toLocalDateStr(b.started_at) !== iso) continue
+      const bStart = blockStartMin(b)
+      const bEnd   = blockEndMin(b)
+      for (let m = bStart; m < bEnd; m += 15) coveredMins.add(m)
+    }
+
+    for (let m = newStartMin; m < newEndMin; m += 15) {
+      if (!coveredMins.has(m)) {
+        const d = parseLocalDate(iso)
+        d.setHours(Math.floor(m / 60), m % 60, 0, 0)
+        const newBlock = {
+          id:             Date.now() * 1000 + m,
+          started_at:     d.toISOString(),
+          total_seconds:  15 * 60,
+          dominant_title: project?.name ?? 'Nieuw blok',
+          project,
+        }
+        blocks.value.push(newBlock)
+        selectedBlocks.value.push(newBlock.id)
+        coveredMins.add(m)
+      }
+    }
+
+    // ── Backend (uncomment als klaar) ──────────────────────────────────────
+    // api.post('/activity-blocks/bulk/', { ... })
+  }
+
+  // ── moveBlocks ─────────────────────────────────────────────────────────────
+  const moveBlocks = (blockIds, targetIso, deltaMin) => {
+    for (const id of blockIds) {
+      const block = blocks.value.find(b => b.id === id)
+      if (!block) continue
+      const oldMin  = blockStartMin(block)
+      const newMin  = Math.max(0, Math.min(oldMin + deltaMin, 24 * 60 - 15))
+      const snapped = Math.round(newMin / 15) * 15
+      const d = parseLocalDate(targetIso)
+      d.setHours(Math.floor(snapped / 60), snapped % 60, 0, 0)
+      block.started_at = d.toISOString()
+    }
+
+    // ── Backend (uncomment als klaar) ──────────────────────────────────────
+    // api.post('/activity-blocks/bulk/', { ... })
+  }
 
   const fetchWeekBlocks = async () => {
     isLoading.value = true
     error.value = null
     try {
-      // ── Gebruik mock data ──────────────────────────────────────────────────
-      await new Promise(r => setTimeout(r, 300)) // Simuleer netwerk
+      await new Promise(r => setTimeout(r, 300))
       blocks.value = makeMockBlocks(currentDate.value)
       selectedBlocks.value = []
 
@@ -205,27 +290,22 @@ const mergedBlocksByDay = computed(() => {
   const createBlock = (slotInfo, projectId) => {
     const project = projectId ? projects.value.find(p => p.id === projectId) : null
     const newBlock = {
-      id: Date.now(), // tijdelijk ID, backend geeft echte
-      started_at: makeLocalISO(slotInfo.iso, slotInfo.hour, slotInfo.minute),
-      total_seconds: 15 * 60, // standaard 15 minuten
+      id:             Date.now(),
+      started_at:     makeLocalISO(slotInfo.iso, slotInfo.hour, slotInfo.minute),
+      total_seconds:  15 * 60,
       dominant_title: project?.name ?? 'Nieuw blok',
-      project: project ?? null,
+      project:        project ?? null,
     }
     blocks.value.push(newBlock)
 
     // ── Backend (uncomment als klaar) ──────────────────────────────────────
-    // api.post('/activity-blocks/', {
-    //   started_at: newBlock.started_at,
-    //   total_seconds: newBlock.total_seconds,
-    //   project: projectId,
-    // })
+    // api.post('/activity-blocks/', { ... })
   }
 
   const assignToProject = async (projectId) => {
     const project = projects.value.find(p => p.id === projectId)
     if (!project) return
 
-    // Optimistisch updaten
     for (const id of selectedBlocks.value) {
       const block = blocks.value.find(b => b.id === id)
       if (block) block.project = project
@@ -240,23 +320,21 @@ const mergedBlocksByDay = computed(() => {
     //   })
     // } catch (err) {
     //   error.value = 'Fout bij toewijzen project'
-    //   await fetchWeekBlocks() // Herlaad bij fout
+    //   await fetchWeekBlocks()
     // }
   }
 
   const applyRules = async () => {
     isLoading.value = true
     try {
-      // ── Backend (uncomment als klaar) ──────────────────────────────────────
-      // await api.post('/activity-blocks/apply-rules/')
-      // await fetchWeekBlocks()
-
-      // Mock: wijs eerste project toe aan ongekoppelde blokken die VS Code bevatten
       for (const block of unassignedBlocks.value) {
         if (block.dominant_title?.includes('VS Code')) {
           block.project = projects.value[0]
         }
       }
+      // ── Backend (uncomment als klaar) ──────────────────────────────────────
+      // await api.post('/activity-blocks/apply-rules/')
+      // await fetchWeekBlocks()
     } catch (err) {
       error.value = 'Fout bij auto-toewijzen'
     } finally {
@@ -267,22 +345,24 @@ const mergedBlocksByDay = computed(() => {
   const goToPrevWeek = () => {
     const d = parseLocalDate(currentDate.value)
     d.setDate(d.getDate() - 7)
-    currentDate.value = d.toISOString().split('T')[0]
+    currentDate.value = toLocalDateStr(d.toISOString())
     fetchWeekBlocks()
   }
 
   const goToNextWeek = () => {
     const d = parseLocalDate(currentDate.value)
     d.setDate(d.getDate() + 7)
-    currentDate.value = d.toISOString().split('T')[0]
+    currentDate.value = toLocalDateStr(d.toISOString())
     fetchWeekBlocks()
   }
 
   return {
     blocks, projects, selectedBlocks, currentDate,
-    isLoading, error, unassignedBlocks, blocksByDay, mergedBlocksByDay,
-    toggleBlock, selectAll, selectUnassigned, clearSelection, selectOrCreateRange,
+    isLoading, error, unassignedBlocks, mergedBlocksByDay,
+    toggleBlock, toggleMany,
+    selectAll, selectUnassigned, clearSelection, selectOrCreateRange,
     fetchWeekBlocks, createBlock, assignToProject, applyRules,
     goToPrevWeek, goToNextWeek,
+    resizeRange, moveBlocks,
   }
 })

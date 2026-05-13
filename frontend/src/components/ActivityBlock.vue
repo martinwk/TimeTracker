@@ -1,24 +1,35 @@
 <template>
   <div
-    class="absolute left-0.5 right-0.5 rounded overflow-hidden cursor-pointer transition-all duration-100"
+    class="activity-block absolute left-0.5 right-0.5 rounded overflow-visible select-none transition-colors duration-100"
     :class="[
       isSelected
         ? 'ring-2 ring-blue-500 ring-offset-1 z-20'
         : 'hover:ring-1 hover:ring-blue-300 hover:z-10 z-0',
+      isDragging ? 'opacity-40 pointer-events-none' : '',
     ]"
-    :style="style"
-    @click.stop="onToggle"
+    :style="[style, { cursor: activeCursor }]"
     :title="displayTitle"
+    @mousedown.stop="onMouseDown"
+    @mousemove="onMouseMove"
+    @mouseleave="onMouseLeave"
   >
     <!-- Project kleurstreep links -->
     <div
       v-if="project"
-      class="absolute left-0 top-0 bottom-0 w-1 shrink-0"
+      class="absolute left-0 top-0 bottom-0 w-1 shrink-0 rounded-l"
       :style="{ backgroundColor: project.color }"
     />
 
+    <!-- Resize-handle boven -->
+    <div
+      class="absolute inset-x-0 top-0 h-2 z-10 flex items-start justify-center pt-px pointer-events-none transition-opacity duration-100"
+      :class="nearEdge === 'top' ? 'opacity-100' : 'opacity-0'"
+    >
+      <div class="w-5 h-0.5 rounded-full bg-blue-400" />
+    </div>
+
     <!-- Inhoud -->
-    <div class="absolute inset-0 flex flex-col justify-between p-0.5 pl-1.5 overflow-hidden">
+    <div class="absolute inset-0 flex flex-col justify-between p-0.5 pl-1.5 overflow-hidden rounded">
       <span
         v-if="isLargeEnough"
         class="text-[10px] leading-tight font-medium truncate"
@@ -27,87 +38,108 @@
         {{ displayTitle }}
       </span>
       <div class="flex items-center justify-end gap-1">
-        <span v-if="props.blocks && props.blocks.length > 1" class="text-[9px] text-gray-300">{{ props.blocks.length }}×</span>
+        <span v-if="props.blocks && props.blocks.length > 1" class="text-[9px] text-gray-300">
+          {{ props.blocks.length }}×
+        </span>
         <span class="text-[9px] leading-none text-gray-400">
           {{ formatDuration(totalSeconds) }}
         </span>
       </div>
     </div>
+
+    <!-- Resize-handle onder -->
+    <div
+      class="absolute inset-x-0 bottom-0 h-2 z-10 flex items-end justify-center pb-px pointer-events-none transition-opacity duration-100"
+      :class="nearEdge === 'bottom' ? 'opacity-100' : 'opacity-0'"
+    >
+      <div class="w-5 h-0.5 rounded-full bg-blue-400" />
+    </div>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { parseLocalDate } from '@/utils/date'
 
+// Pixels van boven/onder die als resize-zone gelden
+const EDGE_PX = 7
+
 const props = defineProps({
-  // Enkelvoudig blok (backwards compat) of samengevoegd blok
-  block: { type: Object, default: null },
-  // Samengevoegde blokken — als dit meegegeven wordt, is het een merged blok
-  blocks: { type: Array, default: null },
+  blocks:     { type: Array,   required: true },
   isSelected: { type: Boolean, default: false },
-  hourHeight: { type: Number, required: true },
+  isDragging: { type: Boolean, default: false },
+  hourHeight: { type: Number,  required: true },
 })
 
-const emit = defineEmits(['toggle', 'toggleMany'])
+const emit = defineEmits(['move-start', 'resize-start'])
 
-// Gebruik blocks array als aanwezig, anders enkelvoudig block
-const isMerged = computed(() => !!props.blocks && props.blocks.length > 1)
-const primaryBlock = computed(() =>
-  props.blocks ? props.blocks[0] : props.block
-)
-const project = computed(() => primaryBlock.value?.project ?? null)
+// ── Derived data ───────────────────────────────────────────────────────────────
+const isMerged     = computed(() => props.blocks.length > 1)
+const primaryBlock = computed(() => props.blocks[0])
+const project      = computed(() => primaryBlock.value?.project ?? null)
 const displayTitle = computed(() => project.value?.name ?? primaryBlock.value?.dominant_title ?? '')
-const totalSeconds = computed(() =>
-  props.blocks
-    ? props.blocks.reduce((sum, b) => sum + b.total_seconds, 0)
-    : props.block.total_seconds
-)
+const totalSeconds = computed(() => props.blocks.reduce((s, b) => s + b.total_seconds, 0))
 
-// Positie en hoogte op basis van eerste en laatste blok
+// ── Positie / stijl ────────────────────────────────────────────────────────────
 const style = computed(() => {
-  const first = primaryBlock.value
-  const start = parseLocalDate(first.started_at)
-  const minutesFromMidnight = start.getHours() * 60 + start.getMinutes()
-  const top = (minutesFromMidnight / 60) * props.hourHeight
+  const first        = primaryBlock.value
+  const start        = parseLocalDate(first.started_at)
+  const minFromMidnight = start.getHours() * 60 + start.getMinutes()
+  const top          = (minFromMidnight / 60) * props.hourHeight
 
   let durationMin
   if (isMerged.value) {
-    const last = props.blocks[props.blocks.length - 1]
-    const lastStart = parseLocalDate(last.started_at)
-    const lastMinutes = lastStart.getHours() * 60 + lastStart.getMinutes()
-    durationMin = lastMinutes + last.total_seconds / 60 - minutesFromMidnight
+    const last  = props.blocks[props.blocks.length - 1]
+    const ls    = parseLocalDate(last.started_at)
+    const lMin  = ls.getHours() * 60 + ls.getMinutes()
+    durationMin = lMin + last.total_seconds / 60 - minFromMidnight
   } else {
-    durationMin = totalSeconds.value / 60
+    durationMin = props.blocks[0].total_seconds / 60
   }
 
   const height = Math.max((durationMin / 60) * props.hourHeight, 12)
-  const bg = project.value ? project.value.color + '28' : '#f1f5f9'
+  const bg     = project.value ? project.value.color + '28' : '#f1f5f9'
 
-  return {
-    top: top + 'px',
-    height: height + 'px',
-    backgroundColor: bg,
-  }
+  return { top: top + 'px', height: height + 'px', backgroundColor: bg }
 })
 
 const isLargeEnough = computed(() => {
-  const durationMin = totalSeconds.value / 60
-  return (durationMin / 60) * props.hourHeight >= 22
+  const dMin = totalSeconds.value / 60
+  return (dMin / 60) * props.hourHeight >= 22
 })
 
-const onToggle = () => {
-  if (props.blocks) {
-    emit('toggleMany', props.blocks.map(b => b.id))
+// ── Cursor / edge detection ────────────────────────────────────────────────────
+const nearEdge = ref(null) // 'top' | 'bottom' | null
+
+const getEdge = (event) => {
+  const rect = event.currentTarget.getBoundingClientRect()
+  const y    = event.clientY - rect.top
+  if (y <= EDGE_PX)               return 'top'
+  if (y >= rect.height - EDGE_PX) return 'bottom'
+  return null
+}
+
+const activeCursor = computed(() => nearEdge.value ? 'ns-resize' : 'grab')
+
+const onMouseMove  = (e) => { nearEdge.value = getEdge(e) }
+const onMouseLeave = ()  => { nearEdge.value = null }
+
+// ── Mousedown — delegeer naar grid ────────────────────────────────────────────
+const onMouseDown = (event) => {
+  if (event.button !== 0) return
+  const edge = getEdge(event)
+  if (edge) {
+    emit('resize-start', { event, blocks: props.blocks, edge })
   } else {
-    emit('toggle', props.block.id)
+    emit('move-start', { event, blocks: props.blocks })
   }
 }
 
+// ── Utils ──────────────────────────────────────────────────────────────────────
 const formatDuration = (seconds) => {
-  const m = Math.floor(seconds / 60)
+  const m   = Math.floor(seconds / 60)
   if (m < 60) return `${m}m`
-  const h = Math.floor(m / 60)
+  const h   = Math.floor(m / 60)
   const rem = m % 60
   return rem > 0 ? `${h}u${rem}m` : `${h}u`
 }

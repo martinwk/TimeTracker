@@ -40,10 +40,14 @@
         <div
           v-for="day in daysOfWeek"
           :key="day.iso"
-          class="relative border-r border-gray-200 last:border-r-0 cursor-crosshair select-none"
+          :data-iso="day.iso"
+          class="relative border-r border-gray-200 last:border-r-0 select-none"
           :style="{ height: totalHeight + 'px' }"
-          :class="day.isToday ? 'bg-blue-50/20' : ''"
-          @mousedown="onMouseDown($event, day)"
+          :class="[
+            day.isToday ? 'bg-blue-50/20' : '',
+            activeResize ? 'cursor-ns-resize' : (activeMove ? 'cursor-grabbing' : 'cursor-crosshair'),
+          ]"
+          @mousedown="onColumnMouseDown($event, day.iso)"
         >
           <!-- Uurlijnen -->
           <div
@@ -64,23 +68,38 @@
             <div class="flex-1 border-t border-red-400" />
           </div>
 
-          <!-- Drag selectie overlay -->
+          <!-- Selectie-drag overlay -->
           <div
-            v-if="drag && drag.iso === day.iso"
+            v-if="selDrag && selDrag.iso === day.iso"
             class="absolute inset-x-0.5 bg-blue-400/20 border border-blue-400 rounded pointer-events-none z-10"
-            :style="dragOverlayStyle"
+            :style="selDragStyle"
+          />
+
+          <!-- Move-preview ghost -->
+          <div
+            v-if="activeMove && activeMove.previewIso === day.iso"
+            class="absolute left-1 right-1 rounded border-2 border-dashed border-blue-400 bg-blue-50/60 pointer-events-none z-25"
+            :style="movePreviewStyle"
+          />
+
+          <!-- Resize-preview ghost -->
+          <div
+            v-if="activeResize && activeResize.iso === day.iso"
+            class="absolute left-1 right-1 rounded border-2 border-dashed border-violet-400 bg-violet-50/60 pointer-events-none z-25"
+            :style="resizePreviewStyle"
           />
 
           <!-- Blokken -->
           <ActivityBlock
-             v-for="group in mergedBlocksByDay[day.iso] ?? []"
-             :key="group.blocks[0].id"
-             :blocks="group.blocks"
-             :is-selected="group.blocks.every(b => selectedBlocks.includes(b.id))"
-             :hour-height="hourHeight"
-             @toggle="store.toggleBlock"
-             @toggle-many="store.toggleMany"
-           />
+            v-for="group in mergedBlocksByDay[day.iso] ?? []"
+            :key="group.blocks[0].id"
+            :blocks="group.blocks"
+            :is-selected="group.blocks.every(b => selectedBlocks.includes(b.id))"
+            :is-dragging="!!activeMove && activeMove.blockIds.some(id => group.blocks.find(b => b.id === id))"
+            :hour-height="hourHeight"
+            @move-start="onMoveStart($event, day.iso)"
+            @resize-start="onResizeStart($event, day.iso)"
+          />
         </div>
 
       </div>
@@ -100,39 +119,39 @@
 <script setup>
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useActivityBlocksStore } from '@/stores/activityBlocks'
+import { parseLocalDate, toLocalDateStr } from '@/utils/date'
 import ActivityBlock from '@/components/ActivityBlock.vue'
 import SlotSuggestion from '@/components/SlotSuggestion.vue'
 
-const store = useActivityBlocksStore()
-const gridEl = ref(null)
+const store   = useActivityBlocksStore()
+const gridEl  = ref(null)
 
-const hourHeight = 56
+const hourHeight  = 56
 const totalHeight = 24 * hourHeight
 
-const gridCols = computed(() => ({
-  gridTemplateColumns: `48px repeat(7, minmax(0, 1fr))`
-}))
+const gridCols = computed(() => ({ gridTemplateColumns: `48px repeat(7, minmax(0, 1fr))` }))
 
-const selectedBlocks = computed(() => store.selectedBlocks)
+const selectedBlocks    = computed(() => store.selectedBlocks)
 const mergedBlocksByDay = computed(() => store.mergedBlocksByDay)
 
+// ── Weekdagen ──────────────────────────────────────────────────────────────────
 const daysOfWeek = computed(() => {
-  const todayStr = new Date().toISOString().split('T')[0]
-  const monday = new Date(store.currentDate)
+  const todayStr = toLocalDateStr(new Date().toISOString())
+  const monday   = new Date(store.currentDate)
   return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday)
+    const d   = new Date(monday)
     d.setDate(monday.getDate() + i)
-    const iso = d.toISOString().split('T')[0]
+    const iso = toLocalDateStr(d.toISOString())
     return {
       iso,
       isToday: iso === todayStr,
       weekday: d.toLocaleDateString('nl-NL', { weekday: 'short' }),
-      dayNum: d.getDate(),
+      dayNum:  d.getDate(),
     }
   })
 })
 
-// Huidige tijd
+// ── Huidige tijd ───────────────────────────────────────────────────────────────
 const currentTimeTop = ref(null)
 let timer = null
 const updateCurrentTime = () => {
@@ -142,113 +161,303 @@ const updateCurrentTime = () => {
 onMounted(() => { updateCurrentTime(); timer = setInterval(updateCurrentTime, 60_000) })
 onUnmounted(() => clearInterval(timer))
 
-// ── Drag selectie ────────────────────────────────────────────────────────────
-const drag = ref(null) // { iso, startMinutes, currentMinutes, startY, rect }
+// ── Pure helpers (geen store-referenties) ──────────────────────────────────────
+const snap   = (min) => Math.round(min / 15) * 15
+const clamp  = (min) => Math.max(0, Math.min(min, 24 * 60 - 15))
+const yToMin = (y)   => snap(Math.floor(y / hourHeight * 60))
 
-const yToMinutes = (y) => {
-  const minutes = Math.floor(y / hourHeight * 60)
-  return Math.floor(minutes / 15) * 15 // snap naar kwartier
+/** Viewport-rect van een dagkolom */
+const colRect = (iso) => {
+  const el = gridEl.value?.querySelector(`[data-iso="${iso}"]`)
+  return el ? el.getBoundingClientRect() : null
 }
 
-const dragOverlayStyle = computed(() => {
-  if (!drag.value) return {}
-  const start = Math.min(drag.value.startMinutes, drag.value.currentMinutes)
-  const end = Math.max(drag.value.startMinutes, drag.value.currentMinutes) + 15
-  const top = (start / 60) * hourHeight
+/** ISO van de kolom onder clientX */
+const isoAtX = (clientX) => {
+  const cols = gridEl.value?.querySelectorAll('[data-iso]') ?? []
+  for (const col of cols) {
+    const r = col.getBoundingClientRect()
+    if (clientX >= r.left && clientX < r.right) return col.dataset.iso
+  }
+  return null
+}
+
+/** Startminuut van een blok binnen de dag */
+const blockStartMin = (block) => {
+  const d = parseLocalDate(block.started_at)
+  return d.getHours() * 60 + d.getMinutes()
+}
+const blockEndMin = (block) => blockStartMin(block) + block.total_seconds / 60
+
+
+// ════════════════════════════════════════════════════════════════════════════════
+// 1. SELECTIE-DRAG  (slepen op leeg grid)
+// ════════════════════════════════════════════════════════════════════════════════
+const selDrag = ref(null) // { iso, startMin, curMin, rect }
+
+const selDragStyle = computed(() => {
+  if (!selDrag.value) return {}
+  const start  = Math.min(selDrag.value.startMin, selDrag.value.curMin)
+  const end    = Math.max(selDrag.value.startMin, selDrag.value.curMin) + 15
+  const top    = (start / 60) * hourHeight
   const height = ((end - start) / 60) * hourHeight
   return { top: top + 'px', height: Math.max(height, 4) + 'px' }
 })
 
-const onMouseDown = (event, day) => {
-  // Alleen linkermuisknop
-  if (event.button !== 0) return
-  suggestion.value = null
-
-  const rect = event.currentTarget.getBoundingClientRect()
-  const y = event.clientY - rect.top
-  const minutes = yToMinutes(y)
-
-  drag.value = {
-    iso: day.iso,
-    startMinutes: minutes,
-    currentMinutes: minutes,
-    rect,
-  }
-
-  // Voeg globale listeners toe
-  window.addEventListener('mousemove', onMouseMove)
-  window.addEventListener('mouseup', onMouseUp)
+const onSelDragMove = (e) => {
+  if (!selDrag.value) return
+  const y = Math.max(0, Math.min(e.clientY - selDrag.value.rect.top, totalHeight))
+  selDrag.value = { ...selDrag.value, curMin: yToMin(y) }
 }
 
-const onMouseMove = (event) => {
-  if (!drag.value) return
-  const y = event.clientY - drag.value.rect.top
-  const clampedY = Math.max(0, Math.min(y, totalHeight))
-  drag.value.currentMinutes = yToMinutes(clampedY)
-}
+const onSelDragUp = (e) => {
+  window.removeEventListener('mousemove', onSelDragMove)
+  window.removeEventListener('mouseup',   onSelDragUp)
+  if (!selDrag.value) return
 
-const onMouseUp = (event) => {
-  if (!drag.value) return
+  const { iso, startMin, curMin } = selDrag.value
+  selDrag.value = null
 
-  const startMin = Math.min(drag.value.startMinutes, drag.value.currentMinutes)
-  const endMin = Math.max(drag.value.startMinutes, drag.value.currentMinutes) + 15
-  const iso = drag.value.iso
-  const wasDrag = endMin - startMin > 15 // meer dan één kwartier = echte drag
+  const rangeStart = Math.min(startMin, curMin)
+  const rangeEnd   = Math.max(startMin, curMin) + 15
+  const wasDrag    = rangeEnd - rangeStart > 15
 
-  window.removeEventListener('mousemove', onMouseMove)
-  window.removeEventListener('mouseup', onMouseUp)
+  const containerRect = gridEl.value.getBoundingClientRect()
+  const popupTop  = e.clientY - containerRect.top + gridEl.value.scrollTop + 8
+  const popupLeft = Math.min(e.clientX - containerRect.left + 8, containerRect.width - 240)
 
   if (wasDrag) {
-    // Selecteer/maak blokken in de range aan
-    store.selectOrCreateRange(iso, startMin, endMin)
-
-    // Toon popup om project toe te wijzen
-    const containerRect = gridEl.value.getBoundingClientRect()
-    const popupTop = event.clientY - containerRect.top + gridEl.value.scrollTop + 8
-    const popupLeft = event.clientX - containerRect.left + 8
-    const left = Math.min(popupLeft, containerRect.width - 240)
-
+    store.selectOrCreateRange(iso, rangeStart, rangeEnd)
     suggestion.value = {
-      slotInfo: { iso, hour: Math.floor(startMin / 60), minute: startMin % 60 },
-      position: { top: popupTop + 'px', left: left + 'px' },
-      isRange: true,
+      slotInfo: { iso, hour: Math.floor(rangeStart / 60), minute: rangeStart % 60 },
+      position: { top: popupTop + 'px', left: popupLeft + 'px' },
+      isRange:  true,
     }
   } else {
-    // Gewone klik — maak één blok aan
-    const hour = Math.floor(startMin / 60)
-    const minute = startMin % 60
-    const containerRect = gridEl.value.getBoundingClientRect()
-    const popupTop = event.clientY - containerRect.top + gridEl.value.scrollTop + 8
-    const popupLeft = event.clientX - containerRect.left + 8
-    const left = Math.min(popupLeft, containerRect.width - 240)
-
     suggestion.value = {
-      slotInfo: { iso, hour, minute },
-      position: { top: popupTop + 'px', left: left + 'px' },
-      isRange: false,
+      slotInfo: { iso, hour: Math.floor(rangeStart / 60), minute: rangeStart % 60 },
+      position: { top: popupTop + 'px', left: popupLeft + 'px' },
+      isRange:  false,
     }
   }
-
-  drag.value = null
 }
 
-// ── Popup ────────────────────────────────────────────────────────────────────
+
+// ════════════════════════════════════════════════════════════════════════════════
+// 2. MOVE-DRAG  (blok verslepen)
+// Slaat alleen primitieven op — geen block-object referenties.
+// ════════════════════════════════════════════════════════════════════════════════
+/**
+ * activeMove: {
+ *   blockIds:       number[]  — IDs van de groep
+ *   origIso:        string    — dag bij mousedown
+ *   origStartMin:   number    — startminuut van eerste blok bij mousedown
+ *   durationMin:    number    — visuele duur van de groep
+ *   clickOffsetMin: number    — klikpositie t.o.v. blok-top
+ *   projectId:      number|null
+ *   previewIso:     string    — dag van de live preview
+ *   previewStart:   number    — startminuut van de live preview
+ *   moved:          boolean
+ * }
+ */
+const activeMove = ref(null)
+
+const movePreviewStyle = computed(() => {
+  if (!activeMove.value) return {}
+  const { previewStart, durationMin } = activeMove.value
+  return {
+    top:    (previewStart / 60) * hourHeight + 'px',
+    height: Math.max((durationMin / 60) * hourHeight, 12) + 'px',
+  }
+})
+
+const onMoveStart = ({ event, blocks }, iso) => {
+  if (event.button !== 0) return
+
+  const first      = blocks[0]
+  const last       = blocks[blocks.length - 1]
+  const origStart  = blockStartMin(first)
+  const duration   = blockEndMin(last) - origStart
+  const projectId  = first.project?.id ?? null
+
+  const rect     = colRect(iso)
+  if (!rect) return
+  const clickMin = yToMin(Math.max(0, event.clientY - rect.top))
+
+  activeMove.value = {
+    blockIds:       blocks.map(b => b.id),
+    origIso:        iso,
+    origStartMin:   origStart,
+    durationMin:    duration,
+    clickOffsetMin: clickMin - origStart,
+    projectId,
+    previewIso:     iso,
+    previewStart:   origStart,
+    moved:          false,
+  }
+
+  window.addEventListener('mousemove', onMoveDragMove)
+  window.addEventListener('mouseup',   onMoveDragUp)
+}
+
+const onMoveDragMove = (e) => {
+  if (!activeMove.value) return
+  const targetIso = isoAtX(e.clientX) ?? activeMove.value.previewIso
+  const rect      = colRect(targetIso)
+  if (!rect) return
+
+  const y         = e.clientY - rect.top
+  const clickMin  = yToMin(Math.max(0, Math.min(y, totalHeight)))
+  const newStart  = clamp(snap(clickMin - activeMove.value.clickOffsetMin))
+  const moved     = activeMove.value.moved ||
+    newStart !== activeMove.value.previewStart ||
+    targetIso !== activeMove.value.previewIso
+
+  activeMove.value = { ...activeMove.value, previewIso: targetIso, previewStart: newStart, moved }
+}
+
+const onMoveDragUp = () => {
+  window.removeEventListener('mousemove', onMoveDragMove)
+  window.removeEventListener('mouseup',   onMoveDragUp)
+  if (!activeMove.value) return
+
+  const move = activeMove.value
+  activeMove.value = null
+
+  if (!move.moved) {
+    // Geen beweging → toggle selectie
+    store.toggleMany(move.blockIds)
+    return
+  }
+
+  const deltaMin = move.previewStart - move.origStartMin
+  store.moveBlocks(move.blockIds, move.previewIso, deltaMin)
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════════
+// 3. RESIZE-DRAG  (rand slepen)
+// Slaat alleen primitieven op — de store zoekt zelf de blokken op bij mouseup.
+// ════════════════════════════════════════════════════════════════════════════════
+/**
+ * activeResize: {
+ *   iso:          string       — dag
+ *   projectId:    number|null  — project van de groep (om de juiste blokken te vinden)
+ *   oldStartMin:  number       — startminuut van de groep bij mousedown
+ *   oldEndMin:    number       — eindminuut van de groep bij mousedown
+ *   fixedMin:     number       — het vaste uiteinde (beweegt NIET mee)
+ *   curMin:       number       — het uiteinde dat de gebruiker sleept
+ *   edge:         'top'|'bottom'
+ * }
+ */
+const activeResize = ref(null)
+
+const resizePreviewStyle = computed(() => {
+  if (!activeResize.value) return {}
+  const { fixedMin, curMin, edge } = activeResize.value
+  // bottom-resize: vast = top,    sleep = bodem
+  // top-resize:    vast = bodem,  sleep = top
+  const startMin = edge === 'bottom' ? fixedMin                    : curMin
+  const endMin   = edge === 'bottom' ? curMin                      : fixedMin
+  return {
+    top:    (startMin / 60) * hourHeight + 'px',
+    height: Math.max(((endMin - startMin) / 60) * hourHeight, 12) + 'px',
+  }
+})
+
+const onResizeStart = ({ event, blocks, edge }, iso) => {
+  if (event.button !== 0) return
+
+  const first      = blocks[0]
+  const last       = blocks[blocks.length - 1]
+  const oldStartMin = blockStartMin(first)
+  const oldEndMin   = blockEndMin(last)
+  const projectId   = first.project?.id ?? null
+
+  // fixedMin = het uiteinde dat NIET beweegt
+  // curMin   = het uiteinde dat de gebruiker sleept (begint op de huidige rand)
+  const fixedMin = edge === 'bottom' ? oldStartMin : oldEndMin
+  const curMin   = edge === 'bottom' ? oldEndMin   : oldStartMin
+
+  activeResize.value = {
+    iso,
+    projectId,
+    oldStartMin,
+    oldEndMin,
+    fixedMin,
+    curMin,
+    edge,
+  }
+
+  window.addEventListener('mousemove', onResizeDragMove)
+  window.addEventListener('mouseup',   onResizeDragUp)
+}
+
+const onResizeDragMove = (e) => {
+  if (!activeResize.value) return
+  const rect = colRect(activeResize.value.iso)
+  if (!rect) return
+
+  const y      = e.clientY - rect.top
+  const rawMin = snap(Math.max(0, Math.min(y / hourHeight * 60, 24 * 60)))
+
+  // Blokkeer omkeren: bodem mag niet boven top, top mag niet onder bodem
+  const { edge, fixedMin } = activeResize.value
+  const newCurMin = edge === 'bottom'
+    ? Math.max(rawMin, fixedMin + 15)  // bodem ≥ top + 15
+    : Math.min(rawMin, fixedMin - 15)  // top ≤ bodem - 15
+
+  activeResize.value = { ...activeResize.value, curMin: newCurMin }
+}
+
+const onResizeDragUp = () => {
+  window.removeEventListener('mousemove', onResizeDragMove)
+  window.removeEventListener('mouseup',   onResizeDragUp)
+  if (!activeResize.value) return
+
+  const { iso, projectId, oldStartMin, oldEndMin, fixedMin, curMin, edge } = activeResize.value
+  activeResize.value = null
+
+  // Nieuwe range — zelfde formule als resizePreviewStyle
+  const newStartMin = edge === 'bottom' ? fixedMin : curMin
+  const newEndMin   = edge === 'bottom' ? curMin   : fixedMin
+
+  // Geef alleen primitieven door aan de store
+  store.resizeRange(iso, oldStartMin, oldEndMin, newStartMin, newEndMin, projectId)
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════════
+// Kolom mousedown — alleen op lege achtergrond
+// ════════════════════════════════════════════════════════════════════════════════
+const onColumnMouseDown = (event, iso) => {
+  if (event.button !== 0) return
+  if (event.target.closest('.activity-block')) return
+
+  suggestion.value = null
+  const rect    = event.currentTarget.getBoundingClientRect()
+  const minutes = yToMin(event.clientY - rect.top)
+
+  selDrag.value = { iso, startMin: minutes, curMin: minutes, rect }
+  window.addEventListener('mousemove', onSelDragMove)
+  window.addEventListener('mouseup',   onSelDragUp)
+}
+
+
+// ── Popup ──────────────────────────────────────────────────────────────────────
 const suggestion = ref(null)
 
 const onCreateBlock = ({ projectId, slotInfo }) => {
   if (suggestion.value?.isRange) {
-    // Range: wijs project toe aan alle geselecteerde blokken
     store.assignToProject(projectId)
   } else {
-    // Enkel blok aanmaken
     store.createBlock(slotInfo, projectId)
   }
   suggestion.value = null
 }
 
-// Sluit popup bij klik buiten
-const onOutsideClick = (event) => {
-  if (suggestion.value && !event.target.closest('.slot-suggestion')) {
+const onOutsideClick = (e) => {
+  if (suggestion.value && !e.target.closest('.slot-suggestion')) {
     suggestion.value = null
   }
 }

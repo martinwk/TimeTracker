@@ -1,6 +1,6 @@
 # TimeTracker
 
-> **Maintenance:** Keep this file up to date. When design choices, architecture, data flow, models, or the current state of the project change, update the relevant section here before ending the session.
+> **Maintenance:** Keep this file and `README.md` up to date. When design choices, architecture, data flow, models, features, or the current state of the project change, update the relevant sections in both files before ending the session.
 
 ## What this is
 
@@ -76,27 +76,49 @@ AHK window log (text file)
 
 ## Current state
 
-Backend is largely complete (models, importer, aggregator, rule engine, DRF API). Frontend has a fully interactive UI but **all API calls are currently commented out** — the store uses `makeMockBlocks()` for demo. The next major task is wiring the frontend store to the live API.
+Backend is complete (models, importer, aggregator, rule engine, DRF API). Frontend store is fully wired to the live API — mock data (`makeMockBlocks()`) is still present for reference but no longer used in production flows.
+
+**API contract (ActivityBlock):**
+- `GET /api/activity-blocks/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD` — fetch week
+- `POST /api/activity-blocks/` — create block (requires `started_at`, `total_seconds`; optional `project_id`)
+- `PATCH /api/activity-blocks/{id}/` — update block; `ended_at` and `date` auto-recalculated from `started_at + total_seconds`
+- `POST /api/activity-blocks/assign/` — bulk assign: `{ block_ids: [...], project_id: N|null }`
+- `POST /api/activity-blocks/bulk/` — bulk upsert + delete: `{ blocks: [{id?, started_at, total_seconds, project_id?}], deleted_ids?: [...] }` → `{ created, updated, deleted, blocks }`
+- `GET /api/projects/` — list projects
+- `POST /api/activities/apply-rules/` — run rules engine: `{ date_from, date_to }`
+
+**Serializer:** `project` is a nested read-only object `{ id, name, color }`; write via `project_id` (write-only FK field).
+
+**Test coverage:** 138 backend tests (pytest), 64 frontend tests (Vitest).
+
+**Bulk endpoint — ID-onderscheid:** Temp-IDs (aangemaakt in de frontend met `Date.now() * 1000 + m`) zijn > 1e12. Echte backend-IDs zijn < 1e12. De frontend stuurt alleen echte IDs mee in `deleted_ids`.
 
 Key TODO:
-- Uncomment and implement API calls in `frontend/src/stores/activityBlocks.js`
 - Projects view (CRUD)
 - Stats view
-- Expand backend API tests
+- Remove `makeMockBlocks()` mock data
 
 ---
+
+## Development guidelines
+
+**Test-driven development:** All new functionality must be developed test-first (TDD) unless explicitly told otherwise. Write a failing test, make it pass, then refactor. This applies to both backend (pytest) and frontend (Vitest).
+
+## Terminal
+
+Use **Git Bash** (not PowerShell or cmd) for all shell commands in this project.
 
 ## Running the project
 
 **Backend:**
-```powershell
+```bash
 cd backend
-.venv\Scripts\activate
+source .venv/Scripts/activate
 python manage.py runserver
 ```
 
 **Frontend:**
-```powershell
+```bash
 cd frontend
 npm run dev
 ```
@@ -104,7 +126,7 @@ npm run dev
 Frontend dev server proxies to `http://localhost:8000`. Both must run simultaneously.
 
 **Tests (backend):**
-```powershell
+```bash
 cd backend
 pytest
 ```
@@ -118,7 +140,7 @@ pytest
 - [backend/apps/activities/aggregator.py](backend/apps/activities/aggregator.py) — block aggregation logic
 - [backend/apps/activities/rule_engine.py](backend/apps/activities/rule_engine.py) — auto-assignment rules
 - [backend/apps/activities/views.py](backend/apps/activities/views.py) — DRF viewsets
-- [frontend/src/stores/activityBlocks.js](frontend/src/stores/activityBlocks.js) — central Pinia store (mock data lives here)
+- [frontend/src/stores/activityBlocks.js](frontend/src/stores/activityBlocks.js) — central Pinia store (fully wired to API; mock data still present but unused)
 - [frontend/src/components/ActivityBlockGrid.vue](frontend/src/components/ActivityBlockGrid.vue) — interactive timeline grid
 - [frontend/src/components/ActivityBlock.vue](frontend/src/components/ActivityBlock.vue) — individual block with resize handles
 - [frontend/src/api/api.js](frontend/src/api/api.js) — Axios client setup

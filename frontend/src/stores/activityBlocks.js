@@ -70,7 +70,7 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
   const today = toLocalDateStr(new Date().toISOString())
 
   const blocks         = ref([])
-  const projects       = ref(MOCK_PROJECTS)
+  const projects       = ref([])
   const selectedBlocks = ref([])
   const currentDate    = ref(getMonday(today))
   const isLoading      = ref(false)

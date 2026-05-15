@@ -200,5 +200,8 @@ const handleAssign = (projectId) => {
   showProjectSelector.value = false
 }
 
-onMounted(() => store.fetchWeekBlocks())
+onMounted(() => {
+  store.fetchProjects()
+  store.fetchWeekBlocks()
+})
 </script>

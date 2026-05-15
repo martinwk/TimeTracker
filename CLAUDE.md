@@ -104,6 +104,8 @@ Key TODO:
 
 **Test-driven development:** All new functionality must be developed test-first (TDD) unless explicitly told otherwise. Write a failing test, make it pass, then refactor. This applies to both backend (pytest) and frontend (Vitest).
 
+**Commit messages:** Always write in English.
+
 ## Terminal
 
 Use **Git Bash** (not PowerShell or cmd) for all shell commands in this project.

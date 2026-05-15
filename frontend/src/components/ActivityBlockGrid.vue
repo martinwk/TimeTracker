@@ -17,6 +17,9 @@
         >
           {{ day.dayNum }}
         </div>
+        <div class="text-[10px] text-gray-400 mt-0.5 h-3">
+          {{ day.showMonth ? day.month : '' }}
+        </div>
       </div>
     </div>
 
@@ -144,9 +147,11 @@ const daysOfWeek = computed(() => {
     const iso = toLocalDateStr(d.toISOString())
     return {
       iso,
-      isToday: iso === todayStr,
-      weekday: d.toLocaleDateString('nl-NL', { weekday: 'short' }),
-      dayNum:  d.getDate(),
+      isToday:  iso === todayStr,
+      weekday:  d.toLocaleDateString('nl-NL', { weekday: 'short' }),
+      dayNum:   d.getDate(),
+      showMonth: i === 0 || d.getDate() === 1,
+      month:    d.toLocaleDateString('nl-NL', { month: 'short' }),
     }
   })
 })

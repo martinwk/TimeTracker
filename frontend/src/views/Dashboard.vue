@@ -149,9 +149,14 @@ const projects = computed(() => store.projects)
 const isLoading = computed(() => store.isLoading)
 const error = computed(() => store.error)
 
-// VueDatePicker verwacht een Date object
+// VueDatePicker week-picker verwacht [maandag, zondag]
 const pickerDate = computed({
-  get: () => new Date(store.currentDate),
+  get: () => {
+    const monday = new Date(store.currentDate)
+    const sunday = new Date(monday)
+    sunday.setDate(monday.getDate() + 6)
+    return [monday, sunday]
+  },
   set: () => {},
 })
 
@@ -166,13 +171,20 @@ const onPickerChange = (val) => {
 const formatWeekLabel = (dates) => {
   const start = Array.isArray(dates) ? dates[0] : dates
   if (!start) return ''
-  const d = new Date(start)
+  const d   = new Date(start)
   const end = new Date(d)
   end.setDate(d.getDate() + 6)
 
-  const fmt = (date) => date.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
-  const week = getWeekNumber(d)
-  return `Week ${week} · ${fmt(d)} – ${fmt(end)}`
+  const week     = getWeekNumber(d)
+  const fmtDay   = (date) => date.toLocaleDateString('nl-NL', { day: 'numeric' })
+  const fmtFull  = (date) => date.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+  const sameMon  = d.getMonth() === end.getMonth()
+
+  // "Week 20 · 12–18 mei" als zelfde maand, anders "12 apr – 2 mei"
+  const range = sameMon
+    ? `${fmtDay(d)}–${fmtFull(end)}`
+    : `${fmtFull(d)} – ${fmtFull(end)}`
+  return `Week ${week} · ${range}`
 }
 
 const getWeekNumber = (date) => {

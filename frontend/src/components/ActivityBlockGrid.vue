@@ -51,6 +51,8 @@
             activeResize ? 'cursor-ns-resize' : (activeMove ? 'cursor-grabbing' : 'cursor-crosshair'),
           ]"
           @mousedown="onColumnMouseDown($event, day.iso)"
+          @mousemove.passive="onColumnMouseMove($event, day.iso)"
+          @mouseleave="hoveredSlot = null"
         >
           <!-- Uurlijnen -->
           <div
@@ -92,7 +94,15 @@
             :style="resizePreviewStyle"
           />
 
-          <!-- Blokken -->
+          <!-- Achtergrond-indicatoren voor aggregator-blokken (pointer-events-none) -->
+          <div
+            v-for="block in activityIndicatorsByDay[day.iso] ?? []"
+            :key="'ind-' + block.id"
+            class="absolute left-0.5 right-0.5 rounded pointer-events-none z-0"
+            :style="indicatorStyle(block)"
+          />
+
+          <!-- Interactieve blokken (toegewezen of handmatig leeg) -->
           <ActivityBlock
             v-for="group in mergedBlocksByDay[day.iso] ?? []"
             :key="group.blocks[0].id"
@@ -112,9 +122,27 @@
         v-if="suggestion"
         :slot-info="suggestion.slotInfo"
         :position="suggestion.position"
+        :activities="suggestion.activities ?? []"
         @create="onCreateBlock"
         @close="suggestion = null"
       />
+
+      <!-- Hover tooltip: activiteiten in een slot -->
+      <div
+        v-if="hoveredSlot && !suggestion"
+        class="absolute z-40 pointer-events-none bg-white/95 rounded-lg shadow-lg border border-gray-100 px-2.5 py-1.5 text-xs max-w-48"
+        :style="hoverTooltipStyle"
+      >
+        <div
+          v-for="act in hoveredSlot.activities"
+          :key="act.title"
+          class="flex items-center gap-1.5 py-0.5"
+        >
+          <span class="w-1.5 h-1.5 rounded-full bg-blue-300 shrink-0" />
+          <span class="text-gray-600 truncate flex-1">{{ act.title }}</span>
+          <span class="text-gray-400 shrink-0">{{ formatDuration(act.seconds) }}</span>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -134,8 +162,9 @@ const totalHeight = 24 * hourHeight
 
 const gridCols = computed(() => ({ gridTemplateColumns: `48px repeat(7, minmax(0, 1fr))` }))
 
-const selectedBlocks    = computed(() => store.selectedBlocks)
-const mergedBlocksByDay = computed(() => store.mergedBlocksByDay)
+const selectedBlocks         = computed(() => store.selectedBlocks)
+const mergedBlocksByDay      = computed(() => store.mergedBlocksByDay)
+const activityIndicatorsByDay = computed(() => store.activityIndicatorsByDay)
 
 // ── Weekdagen ──────────────────────────────────────────────────────────────────
 const daysOfWeek = computed(() => {
@@ -167,9 +196,29 @@ onMounted(() => { updateCurrentTime(); timer = setInterval(updateCurrentTime, 60
 onUnmounted(() => clearInterval(timer))
 
 // ── Pure helpers (geen store-referenties) ──────────────────────────────────────
-const snap   = (min) => Math.round(min / 15) * 15
+const snap   = (min) => Math.round(min / 15) * 15          // dichtstbijzijnde slot (voor drag)
 const clamp  = (min) => Math.max(0, Math.min(min, 24 * 60 - 15))
-const yToMin = (y)   => snap(Math.floor(y / hourHeight * 60))
+const yToMin = (y)   => Math.floor(y / hourHeight * 60 / 15) * 15  // slot dat de klik BEVAT (floor)
+
+const formatDuration = (seconds) => {
+  const m = Math.floor(seconds / 60)
+  if (m < 60) return `${m}m`
+  const h   = Math.floor(m / 60)
+  const rem = m % 60
+  return rem > 0 ? `${h}u${rem}m` : `${h}u`
+}
+
+// Stijl voor achtergrond-indicator van een aggregator-blok (altijd 15-min hoogte)
+const indicatorStyle = (block) => {
+  const d      = parseLocalDate(block.started_at)
+  const start  = d.getHours() * 60 + d.getMinutes()
+  return {
+    top:             (start / 60) * hourHeight + 'px',
+    height:          (15 / 60) * hourHeight + 'px',
+    backgroundColor: '#eff6ff',    // blue-50
+    borderLeft:      '2px solid #bfdbfe', // blue-200
+  }
+}
 
 /** Viewport-rect van een dagkolom */
 const colRect = (iso) => {
@@ -192,7 +241,14 @@ const blockStartMin = (block) => {
   const d = parseLocalDate(block.started_at)
   return d.getHours() * 60 + d.getMinutes()
 }
-const blockEndMin = (block) => blockStartMin(block) + block.total_seconds / 60
+const blockEndMin = (block) => {
+  if (block.ended_at) {
+    const e = parseLocalDate(block.ended_at)
+    return e.getHours() * 60 + e.getMinutes()
+  }
+  if (block.block_minutes != null) return blockStartMin(block) + block.block_minutes
+  return blockStartMin(block) + block.total_seconds / 60
+}
 
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -222,28 +278,29 @@ const onSelDragUp = (e) => {
 
   const { iso, startMin, curMin } = selDrag.value
   selDrag.value = null
+  hoveredSlot.value = null
 
   const rangeStart = Math.min(startMin, curMin)
   const rangeEnd   = Math.max(startMin, curMin) + 15
   const wasDrag    = rangeEnd - rangeStart > 15
 
+  // Haal activiteiten op voor het bereik (lege array als geen aggregator-blokken)
+  const activities = store.getTopActivities(iso, rangeStart, rangeEnd)
+
   const containerRect = gridEl.value.getBoundingClientRect()
   const popupTop  = e.clientY - containerRect.top + gridEl.value.scrollTop + 8
   const popupLeft = Math.min(e.clientX - containerRect.left + 8, containerRect.width - 240)
+  const slotInfo  = { iso, hour: Math.floor(rangeStart / 60), minute: rangeStart % 60 }
+  const position  = { top: popupTop + 'px', left: popupLeft + 'px' }
 
-  if (wasDrag) {
+  // Bij drag OF bij klik op een slot met aggregator-activiteit: selecteer de
+  // onderliggende blokken via selectOrCreateRange en gebruik assignToProject.
+  if (wasDrag || activities.length > 0) {
     store.selectOrCreateRange(iso, rangeStart, rangeEnd)
-    suggestion.value = {
-      slotInfo: { iso, hour: Math.floor(rangeStart / 60), minute: rangeStart % 60 },
-      position: { top: popupTop + 'px', left: popupLeft + 'px' },
-      isRange:  true,
-    }
+    suggestion.value = { slotInfo, position, isRange: true, activities }
   } else {
-    suggestion.value = {
-      slotInfo: { iso, hour: Math.floor(rangeStart / 60), minute: rangeStart % 60 },
-      position: { top: popupTop + 'px', left: popupLeft + 'px' },
-      isRange:  false,
-    }
+    // Leeg slot zonder activiteit: maak een nieuw blok aan via createBlock
+    suggestion.value = { slotInfo, position, isRange: false, activities }
   }
 }
 
@@ -439,13 +496,44 @@ const onColumnMouseDown = (event, iso) => {
   if (event.button !== 0) return
   if (event.target.closest('.activity-block')) return
 
-  suggestion.value = null
+  suggestion.value  = null
+  hoveredSlot.value = null
   const rect    = event.currentTarget.getBoundingClientRect()
   const minutes = yToMin(event.clientY - rect.top)
 
   selDrag.value = { iso, startMin: minutes, curMin: minutes, rect }
   window.addEventListener('mousemove', onSelDragMove)
   window.addEventListener('mouseup',   onSelDragUp)
+}
+
+
+// ── Hover tooltip ─────────────────────────────────────────────────────────────
+const hoveredSlot = ref(null) // { activities, x, y } | null
+
+const hoverTooltipStyle = computed(() => {
+  if (!hoveredSlot.value || !gridEl.value) return {}
+  const rect = gridEl.value.getBoundingClientRect()
+  const top  = hoveredSlot.value.y - rect.top + gridEl.value.scrollTop + 8
+  const left = Math.min(hoveredSlot.value.x - rect.left + 12, rect.width - 200)
+  return { top: top + 'px', left: left + 'px' }
+})
+
+const onColumnMouseMove = (e, iso) => {
+  if (activeMove.value || activeResize.value || selDrag.value) {
+    hoveredSlot.value = null
+    return
+  }
+  if (e.target.closest('.activity-block')) {
+    hoveredSlot.value = null
+    return
+  }
+  const rect    = e.currentTarget.getBoundingClientRect()
+  const rawMin  = Math.floor((e.clientY - rect.top) / hourHeight * 60)
+  const slotMin = Math.floor(rawMin / 15) * 15
+  const activities = store.getTopActivities(iso, slotMin, slotMin + 15)
+  hoveredSlot.value = activities.length > 0
+    ? { activities, x: e.clientX, y: e.clientY }
+    : null
 }
 
 

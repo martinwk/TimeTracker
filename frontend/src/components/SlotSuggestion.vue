@@ -6,6 +6,19 @@
       {{ timeLabel }} · Nieuw blok
     </div>
 
+    <!-- Activiteiten uit AHK-import -->
+    <div v-if="activities.length > 0" class="mb-3">
+      <div class="text-[11px] text-gray-400 mb-1">Activiteiten</div>
+      <div
+        v-for="act in activities"
+        :key="act.title"
+        class="flex items-center gap-1 py-0.5"
+      >
+        <span class="text-[11px] text-gray-600 truncate flex-1">{{ act.title }}</span>
+        <span class="text-[10px] text-gray-400 shrink-0">{{ formatSeconds(act.seconds) }}</span>
+      </div>
+    </div>
+
     <!-- Suggestie -->
     <div class="mb-3">
       <div class="text-[11px] text-gray-400 mb-1">Suggestie</div>
@@ -44,12 +57,13 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed } from 'vue'
 import { useActivityBlocksStore } from '@/stores/activityBlocks'
 
 const props = defineProps({
-  slotInfo: { type: Object, required: true }, // { iso, hour, minute }
-  position: { type: Object, required: true },  // { top, left }
+  slotInfo:   { type: Object, required: true },   // { iso, hour, minute }
+  position:   { type: Object, required: true },   // { top, left }
+  activities: { type: Array,  default: () => [] }, // [{ title, seconds }]
 })
 
 const emit = defineEmits(['create', 'close'])
@@ -61,8 +75,15 @@ const timeLabel = computed(() => {
   return `${h}:${m}`
 })
 
-// Mock suggestie: gewoon het eerste project als "suggestie"
-const suggestions = computed(() => store.projects.slice(0, 1))
-const otherProjects = computed(() => store.projects.slice(1))
+const formatSeconds = (secs) => {
+  const m = Math.floor(secs / 60)
+  if (m < 60) return `${m}m`
+  const h   = Math.floor(m / 60)
+  const rem = m % 60
+  return rem > 0 ? `${h}u${rem}m` : `${h}u`
+}
 
+// Mock suggestie: gewoon het eerste project als "suggestie"
+const suggestions   = computed(() => store.projects.slice(0, 1))
+const otherProjects = computed(() => store.projects.slice(1))
 </script>

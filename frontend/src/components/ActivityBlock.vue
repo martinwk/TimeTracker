@@ -42,7 +42,7 @@
           {{ props.blocks.length }}×
         </span>
         <span class="text-[9px] leading-none text-gray-400">
-          {{ formatDuration(totalSeconds) }}
+          {{ formatDuration(visualDurationMin * 60) }}
         </span>
       </div>
     </div>

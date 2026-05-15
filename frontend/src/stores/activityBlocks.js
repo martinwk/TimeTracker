@@ -64,7 +64,18 @@ const blockStartMin = (block) => {
   const d = parseLocalDate(block.started_at)
   return d.getHours() * 60 + d.getMinutes()
 }
-const blockEndMin = (block) => blockStartMin(block) + block.total_seconds / 60
+const blockEndMin = (block) => {
+  // ended_at: authoritative (aggregator stelt dit in op slot-einde, los van
+  // total_seconds die de overlap-tijd is).
+  if (block.ended_at) {
+    const e = parseLocalDate(block.ended_at)
+    return e.getHours() * 60 + e.getMinutes()
+  }
+  // block_minutes: altijd 15 voor aggregator-blokken — betrouwbaarder dan
+  // total_seconds (= overlap-seconden, niet de slot-breedte).
+  if (block.block_minutes != null) return blockStartMin(block) + block.block_minutes
+  return blockStartMin(block) + block.total_seconds / 60
+}
 
 export const useActivityBlocksStore = defineStore('activityBlocks', () => {
   const today = toLocalDateStr(new Date().toISOString())
@@ -76,14 +87,34 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
   const isLoading      = ref(false)
   const error          = ref(null)
 
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  const isAggregatorUnassigned = (block) =>
+    !block.project && block.unique_activities?.length > 0
+
   // ── Computed ───────────────────────────────────────────────────────────────
   const unassignedBlocks = computed(() =>
     blocks.value.filter(b => !b.project)
   )
 
+  // Aggregator-blokken zonder project: worden getoond als achtergrond-indicator,
+  // NIET als interactief blok. Gaat apart naar activityIndicatorsByDay.
+  const activityIndicatorsByDay = computed(() => {
+    const result = {}
+    for (const block of blocks.value) {
+      if (!isAggregatorUnassigned(block)) continue
+      const day = toLocalDateStr(block.started_at)
+      if (!result[day]) result[day] = []
+      result[day].push(block)
+    }
+    return result
+  })
+
   const mergedBlocksByDay = computed(() => {
     const map = {}
     for (const block of blocks.value) {
+      // Aggregator-blokken zonder project worden als achtergrond-indicator getoond,
+      // niet als interactief ActivityBlock.
+      if (isAggregatorUnassigned(block)) continue
       const day = toLocalDateStr(block.started_at)
       if (!map[day]) map[day] = []
       map[day].push(block)
@@ -159,13 +190,24 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
       })
 
       if (existing) {
-        break
+        if (isAggregatorUnassigned(existing)) {
+          // Aggregator-blok: selecteer het en ga door naar de volgende slot
+          if (!selectedBlocks.value.includes(existing.id)) {
+            selectedBlocks.value.push(existing.id)
+          }
+        } else {
+          // Toegewezen blok of handmatig leeg blok: stop
+          break
+        }
       } else {
         const d = parseLocalDate(iso)
         d.setHours(Math.floor(slotStart / 60), slotStart % 60, 0, 0)
+        const dEnd = parseLocalDate(iso)
+        dEnd.setHours(Math.floor(slotEnd / 60), slotEnd % 60, 0, 0)
         const newBlock = {
           id:            Date.now() + min,
           started_at:    d.toISOString(),
+          ended_at:      dEnd.toISOString(),
           total_seconds: 15 * 60,
           dominant_title: 'Nieuw blok',
           project:       null,
@@ -409,6 +451,26 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
     }
   }
 
+  // ── getTopActivities ──────────────────────────────────────────────────────
+  // Pure functie: geeft de top-N activiteiten terug voor aggregator-blokken
+  // in het opgegeven tijdsvenster [startMin, endMin). Sorteert op seconden.
+  const getTopActivities = (iso, startMin, endMin, n = 3) => {
+    const titleSecs = {}
+    for (const block of blocks.value) {
+      if (!isAggregatorUnassigned(block)) continue
+      if (toLocalDateStr(block.started_at) !== iso) continue
+      const bStart = blockStartMin(block)
+      if (bStart < startMin || bStart >= endMin) continue
+      for (const ua of block.unique_activities) {
+        titleSecs[ua.raw_title] = (titleSecs[ua.raw_title] ?? 0) + ua.total_seconds
+      }
+    }
+    return Object.entries(titleSecs)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, n)
+      .map(([title, seconds]) => ({ title, seconds }))
+  }
+
   const goToPrevWeek = () => {
     const d = parseLocalDate(currentDate.value)
     d.setDate(d.getDate() - 7)
@@ -425,11 +487,11 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
 
   return {
     blocks, projects, selectedBlocks, currentDate,
-    isLoading, error, unassignedBlocks, mergedBlocksByDay,
+    isLoading, error, unassignedBlocks, mergedBlocksByDay, activityIndicatorsByDay,
     toggleBlock, toggleMany,
     selectAll, selectUnassigned, clearSelection, selectOrCreateRange,
     fetchWeekBlocks, fetchProjects, createBlock, assignToProject, applyRules,
     goToPrevWeek, goToNextWeek,
-    resizeRange, moveBlocks,
+    resizeRange, moveBlocks, getTopActivities,
   }
 })

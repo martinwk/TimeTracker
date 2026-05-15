@@ -353,8 +353,10 @@ describe('activityBlocks store — API', () => {
       store.projects = [{ id: 2, name: 'Backend', color: '#f59e0b' }]
       api.post.mockResolvedValue({ data: { created: 0, updated: 1, deleted: 0, blocks: [] } })
 
-      // Verklein het blok aan de onderkant (van 9:00-10:00 naar 9:00-9:30)
-      store.resizeRange(MONDAY, 540, 600, 540, 570, 2)
+      // Verklein het blok aan de onderkant (van 9:00-10:00 naar 9:00-9:30).
+      // api.post wordt synchroon aangeroepen vóór de eerste await in resizeRange,
+      // dus de expect werkt ook zonder await op de hele functie.
+      await store.resizeRange(MONDAY, 540, 600, 540, 570, 2)
 
       expect(api.post).toHaveBeenCalledWith(
         '/activities/activity-blocks/bulk/',
@@ -375,7 +377,7 @@ describe('activityBlocks store — API', () => {
       api.post.mockResolvedValue({ data: { created: 0, updated: 1, deleted: 1, blocks: [] } })
 
       // Verklein van 9:00-10:00 naar 9:00-9:30 → blok 11 valt buiten nieuw bereik
-      store.resizeRange(MONDAY, 540, 600, 540, 570, 2)
+      await store.resizeRange(MONDAY, 540, 600, 540, 570, 2)
 
       const call = api.post.mock.calls[0][1]
       expect(call.deleted_ids).toContain(11)
@@ -392,7 +394,7 @@ describe('activityBlocks store — API', () => {
       api.post.mockResolvedValue({ data: { created: 0, updated: 1, deleted: 0, blocks: [] } })
 
       // Verklein zodat het temp-blok buiten het bereik valt (9:30-10:00 → nieuw bereik)
-      store.resizeRange(MONDAY, 540, 600, 570, 600, 2)
+      await store.resizeRange(MONDAY, 540, 600, 570, 600, 2)
 
       const call = api.post.mock.calls[0][1]
       expect(call.deleted_ids).not.toContain(tempId)

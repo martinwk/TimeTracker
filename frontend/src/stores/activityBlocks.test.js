@@ -7,10 +7,11 @@ import { makeLocalISO, parseLocalDate, toLocalDateStr } from '@/utils/date'
 // are timezone-agnostic.
 const makeBlock = (id, iso, startHour, startMin, durationMin, project = null) => ({
   id,
-  started_at: makeLocalISO(iso, startHour, startMin),
-  total_seconds: durationMin * 60,
-  dominant_title: `Block ${id}`,
+  started_at:        makeLocalISO(iso, startHour, startMin),
+  total_seconds:     durationMin * 60,
+  dominant_title:    `Block ${id}`,
   project,
+  unique_activities: [], // expliciet leeg: dit zijn handmatig aangemaakte blokken, geen aggregator-blokken
 })
 
 const localMin = (started_at) => {
@@ -177,7 +178,8 @@ describe('activityBlocks store', () => {
     })
 
     it('new blocks from a project-resize get the project assigned', () => {
-      store.blocks = [makeBlock(1, ISO, 9, 0, 60, proj1)]
+      store.blocks    = [makeBlock(1, ISO, 9, 0, 60, proj1)]
+      store.projects  = [proj1]
       // Extend bottom 10:00 → 10:30 (fill 600–630 with project 1 blocks)
       store.resizeRange(ISO, 540, 600, 540, 630, proj1.id)
       const newBlocks = store.blocks.filter(b => b.id !== 1)

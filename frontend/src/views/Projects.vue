@@ -50,7 +50,7 @@
         v-for="project in filteredProjects"
         :key="project.id"
         data-testid="project-card"
-        class="rounded-xl overflow-hidden border border-gray-200 bg-white shadow-sm flex flex-col"
+        class="group rounded-xl overflow-hidden border border-gray-200 bg-white shadow-sm flex flex-col"
       >
         <!-- Kleurindicator -->
         <div
@@ -78,19 +78,19 @@
           >{{ project.notes }}</p>
           <div v-else class="mb-3" />
 
-          <!-- Actieknoppen -->
-          <div class="flex gap-1 mt-auto">
+          <!-- Actieknoppen: verschijnen bij hover op de kaart -->
+          <div class="flex gap-1 mt-auto opacity-0 group-hover:opacity-100 transition-opacity duration-150">
             <button
               data-testid="btn-bewerken"
               @click="openEditForm(project)"
               title="Bewerken"
-              class="relative group rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors"
+              class="relative group/btn rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
               </svg>
-              <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap rounded bg-gray-800 px-2 py-0.5 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity">Bewerken</span>
+              <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap rounded bg-gray-800 px-2 py-0.5 text-xs text-white opacity-0 group-hover/btn:opacity-100 transition-opacity">Bewerken</span>
             </button>
 
             <button
@@ -98,21 +98,21 @@
               data-testid="btn-archiveren"
               @click="handleArchive(project)"
               title="Archiveren"
-              class="relative group rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors"
+              class="relative group/btn rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="21 8 21 21 3 21 3 8"/>
                 <rect x="1" y="3" width="22" height="5"/>
                 <line x1="10" y1="12" x2="14" y2="12"/>
               </svg>
-              <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap rounded bg-gray-800 px-2 py-0.5 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity">Archiveren</span>
+              <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap rounded bg-gray-800 px-2 py-0.5 text-xs text-white opacity-0 group-hover/btn:opacity-100 transition-opacity">Archiveren</span>
             </button>
             <button
               v-else
               data-testid="btn-activeren"
               @click="handleActivate(project)"
               title="Activeren"
-              class="relative group rounded-md p-2 text-indigo-500 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+              class="relative group/btn rounded-md p-2 text-indigo-500 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="17 1 21 5 17 9"/>
@@ -120,14 +120,14 @@
                 <polyline points="7 23 3 19 7 15"/>
                 <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
               </svg>
-              <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap rounded bg-gray-800 px-2 py-0.5 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity">Activeren</span>
+              <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap rounded bg-gray-800 px-2 py-0.5 text-xs text-white opacity-0 group-hover/btn:opacity-100 transition-opacity">Activeren</span>
             </button>
 
             <button
               data-testid="btn-verwijderen"
               @click="handleDelete(project)"
               title="Verwijderen"
-              class="relative group rounded-md p-2 text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+              class="relative group/btn rounded-md p-2 text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"/>
@@ -135,7 +135,7 @@
                 <path d="M10 11v6M14 11v6"/>
                 <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
               </svg>
-              <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap rounded bg-gray-800 px-2 py-0.5 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity">Verwijderen</span>
+              <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap rounded bg-gray-800 px-2 py-0.5 text-xs text-white opacity-0 group-hover/btn:opacity-100 transition-opacity">Verwijderen</span>
             </button>
           </div>
         </div>

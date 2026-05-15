@@ -22,7 +22,7 @@ from datetime import date, datetime
 
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.activities.aggregator import DEFAULT_BLOCK_MINUTES, aggregate_day, aggregate_range
+from apps.activities.aggregator import DEFAULT_BLOCK_MINUTES, aggregate_day
 from apps.activities.models import WindowActivity
 
 
@@ -90,13 +90,13 @@ class Command(BaseCommand):
             totaal_activiteiten += result.activities_processed
 
             self.stdout.write(
-                f"  {target_date}  →  "
+                f"  {target_date}  ->  "
                 f"{result.blocks_created:3d} blokken  |  "
                 f"{result.activities_processed:4d} activiteiten"
                 + (f"  |  {result.blocks_deleted} oud verwijderd" if result.blocks_deleted else "")
             )
 
-        self.stdout.write("─" * 55)
+        self.stdout.write("-" * 55)
         self.stdout.write(
             self.style.SUCCESS(
                 f"Klaar: {totaal_blokken} blokken aangemaakt uit {totaal_activiteiten} activiteiten."

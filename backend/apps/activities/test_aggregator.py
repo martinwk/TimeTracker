@@ -1,25 +1,36 @@
-from datetime import date, datetime, timedelta, timezone
+"""
+Tests voor de vaste-raster aggregator.
+
+Ontwerp: de dag wordt verdeeld in vaste 15-minutenslots.
+Per slot worden alle WindowActivity-records die overlap hebben met
+dat slot gecombineerd. Daardoor zijn overlappende ActivityBlocks
+structureel onmogelijk.
+"""
+
+from datetime import date, datetime, timedelta
 
 import pytest
+from django.utils.timezone import make_aware
 
-from apps.activities.aggregator import (
-    DEFAULT_BLOCK_MINUTES,
-    _build_blocks_for_day,
-    _OpenBlock,
-    aggregate_day,
-)
-from apps.activities.models import ActivityBlock, WindowActivity
+from apps.activities.aggregator import DEFAULT_BLOCK_MINUTES, aggregate_day
+from apps.activities.models import ActivityBlock, UniqueActivity, WindowActivity
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def make_activity(title, start_offset_minutes, duration_seconds=30, app=None, save=False):
-    """
-    Maak een WindowActivity op 2026-03-13 startend op 09:00 + offset.
-    app_name wordt automatisch geëxtraheerd uit title tenzij expliciet opgegeven.
-    """
-    base = datetime(2026, 3, 13, 9, 0, tzinfo=timezone.utc)
-    started_at = base + timedelta(minutes=start_offset_minutes)
+TARGET_DATE = date(2026, 3, 13)
+
+
+def local_dt(hour, minute=0, second=0):
+    """Timezone-aware datetime op TARGET_DATE in de geconfigureerde tijdzone."""
+    return make_aware(datetime(TARGET_DATE.year, TARGET_DATE.month, TARGET_DATE.day,
+                               hour, minute, second))
+
+
+def make_activity(title, start_hour, start_minute=0, duration_seconds=30,
+                  app=None, save=False):
+    """WindowActivity op TARGET_DATE."""
+    started_at = local_dt(start_hour, start_minute)
     ended_at   = started_at + timedelta(seconds=duration_seconds)
     a = WindowActivity.from_log_line(started_at, ended_at, title)
     if app:
@@ -29,191 +40,244 @@ def make_activity(title, start_offset_minutes, duration_seconds=30, app=None, sa
     return a
 
 
-# ── _OpenBlock ────────────────────────────────────────────────────────────────
-
-def test_open_block_deadline():
-    base = datetime(2026, 3, 13, 9, 0, tzinfo=timezone.utc)
-    block = _OpenBlock(
-        app_name="Firefox",
-        started_at=base,
-        ended_at=base,
-        block_minutes=15,
-    )
-    assert block.deadline == base + timedelta(minutes=15)
+def slot_start(hour, minute=0):
+    """Verwachte started_at van een 15-minutenslot."""
+    return local_dt(hour, minute)
 
 
-def test_open_block_dominant_title():
-    base = datetime(2026, 3, 13, 9, 0, tzinfo=timezone.utc)
-    block = _OpenBlock(
-        app_name="Firefox",
-        started_at=base,
-        ended_at=base,
-        block_minutes=15,
-    )
-    a1 = make_activity("Pagina A - Firefox", 0, duration_seconds=10)
-    a2 = make_activity("Pagina B - Firefox", 1, duration_seconds=50)
-    a3 = make_activity("Pagina A - Firefox", 2, duration_seconds=5)
-    block.add(a1)
-    block.add(a2)
-    block.add(a3)
-    # Pagina B heeft 50 seconden, Pagina A heeft 15 seconden
-    assert block.dominant_title == "Pagina B - Firefox"
+def slot_end(hour, minute=0):
+    """Verwachte ended_at van een 15-minutenslot."""
+    return local_dt(hour, minute) + timedelta(minutes=DEFAULT_BLOCK_MINUTES)
 
 
-# ── _build_blocks_for_day ─────────────────────────────────────────────────────
-
-def test_single_activity_makes_one_block():
-    activities = [make_activity("Zotero", 0, app="Zotero")]
-    blocks = _build_blocks_for_day(activities, block_minutes=15)
-    assert len(blocks) == 1
-    assert blocks[0].app_name == "Zotero"
-    assert blocks[0].activity_count == 1
-
-
-def test_activities_within_window_merged():
-    """Twee activiteiten binnen 15 minuten worden één blok."""
-    activities = [
-        make_activity("Zotero", 0,  app="Zotero"),
-        make_activity("Zotero", 5,  app="Zotero"),
-        make_activity("Zotero", 10, app="Zotero"),
-    ]
-    blocks = _build_blocks_for_day(activities, block_minutes=15)
-    assert len(blocks) == 1
-    assert blocks[0].activity_count == 3
-
-
-def test_activities_outside_window_split():
-    """Twee activiteiten meer dan 15 minuten uit elkaar worden twee blokken."""
-    activities = [
-        make_activity("Zotero", 0,  app="Zotero"),
-        make_activity("Zotero", 20, app="Zotero"),
-    ]
-    blocks = _build_blocks_for_day(activities, block_minutes=15)
-    assert len(blocks) == 2
-
-
-def test_activity_exactly_at_deadline_opens_new_block():
-    """Een activiteit precies op de deadline opent een nieuw blok."""
-    activities = [
-        make_activity("Zotero", 0,  app="Zotero"),
-        make_activity("Zotero", 15, app="Zotero"),  # precies op deadline
-    ]
-    blocks = _build_blocks_for_day(activities, block_minutes=15)
-    assert len(blocks) == 2
-
-
-def test_total_seconds_summed():
-    activities = [
-        make_activity("Zotero", 0, duration_seconds=60, app="Zotero"),
-        make_activity("Zotero", 5, duration_seconds=90, app="Zotero"),
-    ]
-    blocks = _build_blocks_for_day(activities, block_minutes=15)
-    assert blocks[0].total_seconds == 150
-
-
-def test_empty_activities_returns_no_blocks():
-    assert _build_blocks_for_day([], block_minutes=15) == []
-
-
-def test_custom_block_minutes():
-    """Met een venster van 5 minuten worden dezelfde activiteiten gesplitst."""
-    activities = [
-        make_activity("Zotero", 0,  app="Zotero"),
-        make_activity("Zotero", 10, app="Zotero"),
-    ]
-    blocks_15 = _build_blocks_for_day(activities, block_minutes=15)
-    blocks_5  = _build_blocks_for_day(activities, block_minutes=5)
-    assert len(blocks_15) == 1
-    assert len(blocks_5)  == 2
-
-
-# ── aggregate_day ─────────────────────────────────────────────────────────────
+# ── Basisgedrag ───────────────────────────────────────────────────────────────
 
 @pytest.mark.django_db
-def test_aggregate_day_creates_blocks():
-    make_activity("Zotero", 0,  app="Zotero", save=True)
-    make_activity("Zotero", 5,  app="Zotero", save=True)
-    make_activity("Firefox", 0, app="Firefox", save=True)
+def test_empty_day_creates_no_blocks():
+    result = aggregate_day(TARGET_DATE)
+    assert result.blocks_created == 0
+    assert ActivityBlock.objects.count() == 0
 
-    result = aggregate_day(date(2026, 3, 13), block_minutes=15)
 
-    assert result.blocks_created == 2       # één Zotero-blok, één Firefox-blok
-    assert result.activities_processed == 3
+@pytest.mark.django_db
+def test_single_activity_creates_one_block():
+    make_activity("VS Code", 9, 0, duration_seconds=60, save=True)
+
+    result = aggregate_day(TARGET_DATE)
+
+    assert result.blocks_created == 1
+    assert ActivityBlock.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_block_is_aligned_to_15min_grid():
+    """Blok begint altijd op een veelvoud van 15 minuten."""
+    make_activity("VS Code", 9, 7, duration_seconds=60, save=True)  # 09:07
+
+    aggregate_day(TARGET_DATE)
+
+    block = ActivityBlock.objects.get()
+    assert block.started_at == slot_start(9, 0)
+
+
+@pytest.mark.django_db
+def test_block_spans_exactly_15_minutes():
+    """ended_at is altijd started_at + 15 min."""
+    make_activity("VS Code", 9, 0, duration_seconds=60, save=True)
+
+    aggregate_day(TARGET_DATE)
+
+    block = ActivityBlock.objects.get()
+    assert block.ended_at == block.started_at + timedelta(minutes=DEFAULT_BLOCK_MINUTES)
+
+
+@pytest.mark.django_db
+def test_activity_spanning_two_slots_creates_two_blocks():
+    """Activiteit van 09:05–09:20 → slot 09:00 én slot 09:15."""
+    make_activity("VS Code", 9, 5, duration_seconds=15 * 60, save=True)  # 15 minuten
+
+    aggregate_day(TARGET_DATE)
+
+    assert ActivityBlock.objects.count() == 2
+    starts = sorted(ActivityBlock.objects.values_list("started_at", flat=True))
+    assert starts[0] == slot_start(9, 0)
+    assert starts[1] == slot_start(9, 15)
+
+
+@pytest.mark.django_db
+def test_two_activities_same_slot_creates_one_block():
+    """Twee activiteiten in hetzelfde slot → één blok."""
+    make_activity("VS Code", 9, 2, duration_seconds=60, save=True)
+    make_activity("VS Code", 9, 8, duration_seconds=60, save=True)
+
+    aggregate_day(TARGET_DATE)
+
+    assert ActivityBlock.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_two_activities_different_slots_create_two_blocks():
+    """Activiteiten in aparte slots → twee blokken."""
+    make_activity("VS Code", 9,  0, duration_seconds=60, save=True)
+    make_activity("VS Code", 9, 20, duration_seconds=60, save=True)
+
+    aggregate_day(TARGET_DATE)
+
     assert ActivityBlock.objects.count() == 2
 
 
+# ── Dominant title ────────────────────────────────────────────────────────────
+
 @pytest.mark.django_db
-def test_aggregate_day_excludes_noise():
-    make_activity("Idle", 0, save=True)         # is_noise=True
-    make_activity("Firefox", 5, app="Firefox", save=True)
+def test_dominant_title_is_activity_with_most_overlap():
+    """Titel met meeste overlap-seconden in het slot wint."""
+    # A: 2 sec overlap, B: 10 sec overlap → dominant = B
+    make_activity("Pagina A - Firefox", 9, 0, duration_seconds=2, save=True)
+    make_activity("Pagina B - Firefox", 9, 2, duration_seconds=10, save=True)
 
-    result = aggregate_day(date(2026, 3, 13), block_minutes=15)
+    aggregate_day(TARGET_DATE)
 
-    assert result.activities_processed == 1
+    block = ActivityBlock.objects.get()
+    assert block.dominant_title == "Pagina B - Firefox"
+
+
+@pytest.mark.django_db
+def test_dominant_title_uses_overlap_not_total_duration():
+    """
+    Activiteit A loopt van 09:00–09:20 (20 min), maar heeft slechts 15 sec
+    overlap met slot 09:00–09:15.
+    Activiteit B loopt van 09:05–09:10 (5 min) en heeft 5 min overlap.
+    B wint voor dit slot (5 min > truncated portion of A in this slot).
+    """
+    # A: start 09:00, 20 min → overlap met 09:00-slot = 15 min = 900 sec
+    make_activity("Lang - App", 9, 0, duration_seconds=20 * 60, save=True)
+    # B: start 09:05, 5 min → overlap = 5 min = 300 sec
+    make_activity("Kort - App", 9, 5, duration_seconds=5 * 60, save=True)
+
+    aggregate_day(TARGET_DATE)
+
+    block = ActivityBlock.objects.filter(started_at=slot_start(9, 0)).get()
+    # Lang heeft 900 sec overlap, Kort heeft 300 sec → Lang wint
+    assert "Lang" in block.dominant_title
+
+
+# ── total_seconds ─────────────────────────────────────────────────────────────
+
+@pytest.mark.django_db
+def test_total_seconds_is_overlap_in_slot():
+    """total_seconds = overlap-seconden in het slot, niet de volle activiteitsduur."""
+    # Activiteit van 09:10–09:25 → overlap met slot 09:00-09:15 = 5 min = 300 sec
+    make_activity("VS Code", 9, 10, duration_seconds=15 * 60, save=True)
+
+    aggregate_day(TARGET_DATE)
+
+    block = ActivityBlock.objects.filter(started_at=slot_start(9, 0)).get()
+    assert block.total_seconds == 5 * 60  # alleen de 5 minuten in dit slot
+
+
+@pytest.mark.django_db
+def test_total_seconds_full_slot_when_activity_covers_entirely():
+    """Activiteit die het hele slot dekt → total_seconds = block_minutes * 60."""
+    make_activity("VS Code", 9, 0, duration_seconds=20 * 60, save=True)
+
+    aggregate_day(TARGET_DATE)
+
+    block = ActivityBlock.objects.filter(started_at=slot_start(9, 0)).get()
+    assert block.total_seconds == DEFAULT_BLOCK_MINUTES * 60
+
+
+# ── Ruis ─────────────────────────────────────────────────────────────────────
+
+@pytest.mark.django_db
+def test_noise_activities_excluded():
+    make_activity("Idle", 9, 0, duration_seconds=60, save=True)       # is_noise=True
+    make_activity("VS Code", 9, 5, duration_seconds=60, save=True)
+
+    aggregate_day(TARGET_DATE)
+
     assert ActivityBlock.objects.count() == 1
 
 
-@pytest.mark.django_db
-def test_aggregate_day_deletes_existing_blocks():
-    """Opnieuw aggregeren verwijdert eerst de oude blokken."""
-    make_activity("Zotero", 0, app="Zotero", save=True)
+# ── Geen overlapping ──────────────────────────────────────────────────────────
 
-    aggregate_day(date(2026, 3, 13), block_minutes=15)
+@pytest.mark.django_db
+def test_no_overlapping_blocks():
+    """Structurele garantie: geen enkel paar blokken overlapt."""
+    for minute in range(0, 60, 3):
+        make_activity(f"App {minute} - Programma", 9, minute,
+                      duration_seconds=5 * 60, save=True)
+
+    aggregate_day(TARGET_DATE)
+
+    blocks = list(ActivityBlock.objects.order_by("started_at"))
+    for i in range(len(blocks) - 1):
+        assert blocks[i].ended_at <= blocks[i + 1].started_at, (
+            f"Overlap tussen {blocks[i].started_at} en {blocks[i+1].started_at}"
+        )
+
+
+# ── Heraggregatie ─────────────────────────────────────────────────────────────
+
+@pytest.mark.django_db
+def test_reaggregation_replaces_old_blocks():
+    make_activity("VS Code", 9, 0, duration_seconds=60, save=True)
+
+    aggregate_day(TARGET_DATE)
     assert ActivityBlock.objects.count() == 1
 
-    result = aggregate_day(date(2026, 3, 13), block_minutes=15)
+    result = aggregate_day(TARGET_DATE)
     assert result.blocks_deleted == 1
-    assert ActivityBlock.objects.count() == 1   # niet 2
+    assert ActivityBlock.objects.count() == 1  # niet 2
 
 
-@pytest.mark.django_db
-def test_aggregate_day_reaggregate_with_different_window():
-    """Opnieuw aggregeren met ander venster geeft andere blokindeling."""
-    make_activity("Zotero", 0,  app="Zotero", save=True)
-    make_activity("Zotero", 10, app="Zotero", save=True)
-
-    aggregate_day(date(2026, 3, 13), block_minutes=15)
-    assert ActivityBlock.objects.count() == 1   # samengevoegd
-
-    aggregate_day(date(2026, 3, 13), block_minutes=5)
-    assert ActivityBlock.objects.count() == 2   # gesplitst
-
+# ── Veldwaarden ───────────────────────────────────────────────────────────────
 
 @pytest.mark.django_db
-def test_aggregate_day_no_activities_returns_zero():
-    result = aggregate_day(date(2026, 3, 13), block_minutes=15)
-    assert result.blocks_created == 0
-    assert result.activities_processed == 0
+def test_block_fields_are_correct():
+    make_activity("Koers zetten - Lockefeer - Zotero", 9, 0,
+                  duration_seconds=120, save=True)
 
-
-@pytest.mark.django_db
-def test_aggregate_day_block_has_correct_fields():
-    make_activity("Koers zetten - Lockefeer - Zotero", 0, duration_seconds=120, app="Zotero", save=True)
-
-    aggregate_day(date(2026, 3, 13), block_minutes=15)
+    aggregate_day(TARGET_DATE)
 
     block = ActivityBlock.objects.get()
     assert block.app_name == "Zotero"
-    assert block.total_seconds == 120
-    assert block.activity_count == 1
-    assert block.block_minutes == 15
-    assert block.date == date(2026, 3, 13)
-    assert block.dominant_title == "Koers zetten - Lockefeer - Zotero"
+    assert block.date == TARGET_DATE
+    assert block.block_minutes == DEFAULT_BLOCK_MINUTES
+    assert block.started_at == slot_start(9, 0)
+    assert block.ended_at   == slot_end(9, 0)
+
+
+# ── UniqueActivity ────────────────────────────────────────────────────────────
+
+@pytest.mark.django_db
+def test_unique_activity_created_per_title():
+    make_activity("Pagina A - Firefox", 9, 0, duration_seconds=30, save=True)
+    make_activity("Pagina B - Firefox", 9, 5, duration_seconds=60, save=True)
+
+    aggregate_day(TARGET_DATE)
+
+    block = ActivityBlock.objects.get()
+    assert UniqueActivity.objects.filter(block=block).count() == 2
 
 
 @pytest.mark.django_db
-def test_aggregate_day_many_to_many_linked():
-    """WindowActivity-records worden correct gekoppeld via UniqueActivity."""
-    a1 = make_activity("Zotero", 0, app="Zotero", save=True)
-    a2 = make_activity("Zotero", 5, app="Zotero", save=True)
+def test_unique_activity_seconds_reflect_overlap():
+    """UniqueActivity.total_seconds = overlap van die titel met het slot."""
+    # Activiteit B heeft 300 sec overlap in het slot
+    make_activity("Pagina B - Firefox", 9, 5, duration_seconds=5 * 60, save=True)
 
-    aggregate_day(date(2026, 3, 13), block_minutes=15)
+    aggregate_day(TARGET_DATE)
 
-    block = ActivityBlock.objects.get()
-    # Get all WindowActivity instances linked to this block through unique_activities
-    linked_ids = set(
-        WindowActivity.objects
-        .filter(unique_activity__block=block)
-        .values_list("id", flat=True)
-    )
-    assert linked_ids == {a1.pk, a2.pk}
+    ua = UniqueActivity.objects.get()
+    assert ua.total_seconds == 5 * 60
+
+
+@pytest.mark.django_db
+def test_window_activity_linked_to_unique_activity():
+    a = make_activity("VS Code", 9, 0, duration_seconds=60, save=True)
+
+    aggregate_day(TARGET_DATE)
+
+    a.refresh_from_db()
+    assert a.unique_activity is not None
+    assert a.unique_activity.block is not None

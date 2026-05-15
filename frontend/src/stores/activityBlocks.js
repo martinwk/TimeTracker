@@ -1,7 +1,7 @@
 // src/stores/activityBlocks.js
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-// import api from '@/api/api'  // Uncomment als backend klaar is
+import api from '@/api/api'
 
 // ── Mock data ──────────────────────────────────────────────────────────────────
 function makeMockBlocks(mondayStr) {
@@ -177,10 +177,12 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
   }
 
   // ── resizeRange (ontwerp B) ────────────────────────────────────────────────
-  const resizeRange = (iso, oldStartMin, oldEndMin, newStartMin, newEndMin, projectId) => {
+  const resizeRange = async (iso, oldStartMin, oldEndMin, newStartMin, newEndMin, projectId) => {
     const project = projectId != null
       ? projects.value.find(p => p.id === projectId) ?? null
       : null
+
+    const deletedBackendIds = []
 
     const groupBlocks = blocks.value.filter(b => {
       if (toLocalDateStr(b.started_at) !== iso) return false
@@ -195,6 +197,10 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
       const bEnd   = blockEndMin(block)
 
       if (bEnd <= newStartMin || bStart >= newEndMin) {
+        // Bewaar echte backend-IDs voor de delete-aanroep (temp-IDs zijn > 1e12)
+        if (Number.isInteger(block.id) && block.id > 0 && block.id < 1e12) {
+          deletedBackendIds.push(block.id)
+        }
         const idx = blocks.value.findIndex(b => b.id === block.id)
         if (idx >= 0) blocks.value.splice(idx, 1)
         const selIdx = selectedBlocks.value.indexOf(block.id)
@@ -243,12 +249,37 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
       }
     }
 
-    // ── Backend (uncomment als klaar) ──────────────────────────────────────
-    // api.post('/activity-blocks/bulk/', { ... })
+    // Verzamel alle blokken in het nieuwe bereik voor de bulk-sync
+    const blocksToSync = blocks.value.filter(b => {
+      if (toLocalDateStr(b.started_at) !== iso) return false
+      const bStart = blockStartMin(b)
+      const bEnd   = blockEndMin(b)
+      return bStart < newEndMin && bEnd > newStartMin
+    })
+
+    // api.post wordt synchroon aangeroepen (vóór eerste await) zodat callers
+    // zonder await toch de aanroep zien in tests en fire-and-forget werkt.
+    const postPromise = api.post('/activities/activity-blocks/bulk/', {
+      blocks: blocksToSync.map(b => ({
+        id:            b.id,
+        started_at:    b.started_at,
+        total_seconds: b.total_seconds,
+        project_id:    b.project?.id ?? null,
+      })),
+      deleted_ids: deletedBackendIds,
+    })
+
+    try {
+      await postPromise
+    } catch {
+      await fetchWeekBlocks()
+    }
   }
 
   // ── moveBlocks ─────────────────────────────────────────────────────────────
-  const moveBlocks = (blockIds, targetIso, deltaMin) => {
+  const moveBlocks = async (blockIds, targetIso, deltaMin) => {
+    // Bereken nieuwe started_at per blok en sla originals op voor rollback
+    const patches = []
     for (const id of blockIds) {
       const block = blocks.value.find(b => b.id === id)
       if (!block) continue
@@ -257,29 +288,42 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
       const snapped = Math.round(newMin / 15) * 15
       const d = parseLocalDate(targetIso)
       d.setHours(Math.floor(snapped / 60), snapped % 60, 0, 0)
-      block.started_at = d.toISOString()
+      patches.push({ block, started_at: d.toISOString() })
     }
 
-    // ── Backend (uncomment als klaar) ──────────────────────────────────────
-    // api.post('/activity-blocks/bulk/', { ... })
+    // Optimistisch bijwerken
+    for (const { block, started_at } of patches) {
+      block.started_at = started_at
+    }
+
+    try {
+      const results = await Promise.all(
+        patches.map(({ block, started_at }) =>
+          api.patch(`/activities/activity-blocks/${block.id}/`, { started_at })
+        )
+      )
+      // Sla serverrespons op (bevat bijgewerkt ended_at en date)
+      for (let i = 0; i < results.length; i++) {
+        const idx = blocks.value.findIndex(b => b.id === patches[i].block.id)
+        if (idx >= 0) blocks.value[idx] = results[i].data
+      }
+    } catch {
+      await fetchWeekBlocks()
+    }
   }
 
   const fetchWeekBlocks = async () => {
     isLoading.value = true
     error.value = null
     try {
-      await new Promise(r => setTimeout(r, 300))
-      blocks.value = makeMockBlocks(currentDate.value)
+      const endDate = parseLocalDate(currentDate.value)
+      endDate.setDate(endDate.getDate() + 6)
+      const endDateStr = toLocalDateStr(endDate.toISOString())
+      const res = await api.get('/activities/activity-blocks/', {
+        params: { date_from: currentDate.value, date_to: endDateStr },
+      })
+      blocks.value = res.data.results ?? res.data
       selectedBlocks.value = []
-
-      // ── Backend (uncomment als klaar) ──────────────────────────────────────
-      // const endDate = new Date(currentDate.value)
-      // endDate.setDate(endDate.getDate() + 6)
-      // const res = await api.get('/activity-blocks/', {
-      //   params: { start_date: currentDate.value, end_date: endDate.toISOString().split('T')[0] }
-      // })
-      // blocks.value = res.data.results ?? res.data
-      // selectedBlocks.value = []
     } catch (err) {
       error.value = err.response?.data?.error ?? 'Fout bij ophalen blokken'
     } finally {
@@ -287,10 +331,20 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
     }
   }
 
-  const createBlock = (slotInfo, projectId) => {
+  const fetchProjects = async () => {
+    try {
+      const res = await api.get('/projects/')
+      projects.value = res.data.results ?? res.data
+    } catch {
+      // Projecten zijn essentieel maar mislukken stil bij init
+    }
+  }
+
+  const createBlock = async (slotInfo, projectId) => {
     const project = projectId ? projects.value.find(p => p.id === projectId) : null
+    const tempId = Date.now()
     const newBlock = {
-      id:             Date.now(),
+      id:             tempId,
       started_at:     makeLocalISO(slotInfo.iso, slotInfo.hour, slotInfo.minute),
       total_seconds:  15 * 60,
       dominant_title: project?.name ?? 'Nieuw blok',
@@ -298,44 +352,57 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
     }
     blocks.value.push(newBlock)
 
-    // ── Backend (uncomment als klaar) ──────────────────────────────────────
-    // api.post('/activity-blocks/', { ... })
+    try {
+      const res = await api.post('/activities/activity-blocks/', {
+        started_at:    newBlock.started_at,
+        total_seconds: newBlock.total_seconds,
+        project_id:    projectId ?? null,
+      })
+      const idx = blocks.value.findIndex(b => b.id === tempId)
+      if (idx >= 0) blocks.value[idx] = res.data
+    } catch {
+      const idx = blocks.value.findIndex(b => b.id === tempId)
+      if (idx >= 0) blocks.value.splice(idx, 1)
+    }
   }
 
   const assignToProject = async (projectId) => {
     const project = projects.value.find(p => p.id === projectId)
     if (!project) return
 
-    for (const id of selectedBlocks.value) {
+    const blockIds = [...selectedBlocks.value]
+
+    // Optimistisch bijwerken
+    for (const id of blockIds) {
       const block = blocks.value.find(b => b.id === id)
       if (block) block.project = project
     }
     selectedBlocks.value = []
 
-    // ── Backend (uncomment als klaar) ──────────────────────────────────────
-    // try {
-    //   await api.post('/activity-blocks/assign/', {
-    //     block_ids: selectedBlocks.value,
-    //     project_id: projectId,
-    //   })
-    // } catch (err) {
-    //   error.value = 'Fout bij toewijzen project'
-    //   await fetchWeekBlocks()
-    // }
+    try {
+      await api.post('/activities/activity-blocks/assign/', {
+        block_ids: blockIds,
+        project_id: projectId,
+      })
+    } catch {
+      await fetchWeekBlocks() // terug naar server-staat (rollback optimistische update)
+      error.value = 'Fout bij toewijzen project'
+    }
   }
 
   const applyRules = async () => {
     isLoading.value = true
+    error.value = null
     try {
-      for (const block of unassignedBlocks.value) {
-        if (block.dominant_title?.includes('VS Code')) {
-          block.project = projects.value[0]
-        }
-      }
-      // ── Backend (uncomment als klaar) ──────────────────────────────────────
-      // await api.post('/activity-blocks/apply-rules/')
-      // await fetchWeekBlocks()
-    } catch (err) {
+      const endDate = parseLocalDate(currentDate.value)
+      endDate.setDate(endDate.getDate() + 6)
+      const endDateStr = toLocalDateStr(endDate.toISOString())
+      await api.post('/activities/apply-rules/', {
+        date_from: currentDate.value,
+        date_to:   endDateStr,
+      })
+      await fetchWeekBlocks()
+    } catch {
       error.value = 'Fout bij auto-toewijzen'
     } finally {
       isLoading.value = false
@@ -361,7 +428,7 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
     isLoading, error, unassignedBlocks, mergedBlocksByDay,
     toggleBlock, toggleMany,
     selectAll, selectUnassigned, clearSelection, selectOrCreateRange,
-    fetchWeekBlocks, createBlock, assignToProject, applyRules,
+    fetchWeekBlocks, fetchProjects, createBlock, assignToProject, applyRules,
     goToPrevWeek, goToNextWeek,
     resizeRange, moveBlocks,
   }

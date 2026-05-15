@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from apps.projects.models import Project
 from .models import WindowActivity, ActivityBlock, UniqueActivity, ActivityRule
 
 
@@ -10,12 +11,35 @@ class UniqueActivitySerializer(serializers.ModelSerializer):
         fields = ["id", "block", "raw_title", "total_seconds", "total_minutes"]
 
 
+class ProjectInlineSerializer(serializers.ModelSerializer):
+    """Minimale projectweergave voor inlining in blokresponses."""
+
+    class Meta:
+        model = Project
+        fields = ["id", "name", "color"]
+
+
 class ActivityBlockSerializer(serializers.ModelSerializer):
     unique_activities = UniqueActivitySerializer(many=True, read_only=True)
     total_minutes = serializers.ReadOnlyField()
     dominant_title = serializers.ReadOnlyField()
+    project = ProjectInlineSerializer(read_only=True)
+    project_id = serializers.PrimaryKeyRelatedField(
+        source="project",
+        queryset=Project.objects.all(),
+        allow_null=True,
+        required=False,
+        write_only=True,
+    )
     project_name = serializers.CharField(source="project.name", read_only=True, allow_null=True)
     suggested_projects = serializers.SerializerMethodField()
+
+    # Optioneel bij handmatig aanmaken — defaults worden ingevuld in create()
+    app_name       = serializers.CharField(required=False, max_length=255)
+    activity_count = serializers.IntegerField(required=False)
+    block_minutes  = serializers.IntegerField(required=False)
+    ended_at       = serializers.DateTimeField(required=False)
+    date           = serializers.DateField(required=False)
 
     class Meta:
         model = ActivityBlock
@@ -31,10 +55,35 @@ class ActivityBlockSerializer(serializers.ModelSerializer):
             "block_minutes",
             "dominant_title",
             "project",
+            "project_id",
             "project_name",
             "suggested_projects",
             "unique_activities",
         ]
+
+    def create(self, validated_data):
+        from datetime import timedelta
+        from django.utils.timezone import localdate
+
+        started_at    = validated_data["started_at"]
+        total_seconds = validated_data["total_seconds"]
+
+        validated_data.setdefault("app_name",       "handmatig")
+        validated_data.setdefault("activity_count", 1)
+        validated_data.setdefault("block_minutes",  15)
+        validated_data["ended_at"] = started_at + timedelta(seconds=total_seconds)
+        validated_data["date"]     = localdate(started_at)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        from datetime import timedelta
+        from django.utils.timezone import localdate
+
+        instance = super().update(instance, validated_data)
+        instance.ended_at = instance.started_at + timedelta(seconds=instance.total_seconds)
+        instance.date = localdate(instance.started_at)
+        instance.save(update_fields=["ended_at", "date"])
+        return instance
 
     def get_suggested_projects(self, obj):
         """

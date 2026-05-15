@@ -81,31 +81,51 @@ const displayTitle = computed(() => project.value?.name ?? primaryBlock.value?.d
 const totalSeconds = computed(() => props.blocks.reduce((s, b) => s + b.total_seconds, 0))
 
 // ── Positie / stijl ────────────────────────────────────────────────────────────
-const style = computed(() => {
-  const first        = primaryBlock.value
-  const start        = parseLocalDate(first.started_at)
-  const minFromMidnight = start.getHours() * 60 + start.getMinutes()
-  const top          = (minFromMidnight / 60) * props.hourHeight
 
-  let durationMin
+// Visuele duur in minuten: gebruik ended_at (werkelijke tijdspanne, incl. pauzes
+// tussen AHK-activiteiten), val terug op total_seconds voor tijdelijke blokken.
+const visualDurationMin = computed(() => {
+  const first           = primaryBlock.value
+  const start           = parseLocalDate(first.started_at)
+  const minFromMidnight = start.getHours() * 60 + start.getMinutes()
+
+  let endMin
   if (isMerged.value) {
-    const last  = props.blocks[props.blocks.length - 1]
-    const ls    = parseLocalDate(last.started_at)
-    const lMin  = ls.getHours() * 60 + ls.getMinutes()
-    durationMin = lMin + last.total_seconds / 60 - minFromMidnight
+    const last = props.blocks[props.blocks.length - 1]
+    if (last.ended_at) {
+      const e = parseLocalDate(last.ended_at)
+      endMin  = e.getHours() * 60 + e.getMinutes()
+    } else {
+      const ls = parseLocalDate(last.started_at)
+      endMin   = ls.getHours() * 60 + ls.getMinutes() + last.total_seconds / 60
+    }
   } else {
-    durationMin = props.blocks[0].total_seconds / 60
+    const block = props.blocks[0]
+    if (block.ended_at) {
+      const e = parseLocalDate(block.ended_at)
+      endMin  = e.getHours() * 60 + e.getMinutes()
+    } else {
+      endMin = minFromMidnight + block.total_seconds / 60
+    }
   }
 
-  const height = Math.max((durationMin / 60) * props.hourHeight, 12)
-  const bg     = project.value ? project.value.color + '28' : '#f1f5f9'
+  // Bescherming bij midnight-overgang (ended_at op volgende dag)
+  if (endMin <= minFromMidnight) endMin = minFromMidnight + totalSeconds.value / 60
+  return endMin - minFromMidnight
+})
 
+const style = computed(() => {
+  const first           = primaryBlock.value
+  const start           = parseLocalDate(first.started_at)
+  const minFromMidnight = start.getHours() * 60 + start.getMinutes()
+  const top             = (minFromMidnight / 60) * props.hourHeight
+  const height          = Math.max((visualDurationMin.value / 60) * props.hourHeight, 12)
+  const bg              = project.value ? project.value.color + '28' : '#f1f5f9'
   return { top: top + 'px', height: height + 'px', backgroundColor: bg }
 })
 
 const isLargeEnough = computed(() => {
-  const dMin = totalSeconds.value / 60
-  return (dMin / 60) * props.hourHeight >= 22
+  return (visualDurationMin.value / 60) * props.hourHeight >= 22
 })
 
 // ── Cursor / edge detection ────────────────────────────────────────────────────

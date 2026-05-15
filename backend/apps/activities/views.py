@@ -1,6 +1,8 @@
 from datetime import datetime
 
+import django_filters
 from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -16,6 +18,15 @@ from .serializers import (
     UniqueActivitySerializer,
     ActivityRuleSerializer,
 )
+
+
+class ActivityBlockFilter(django_filters.FilterSet):
+    date_from = django_filters.DateFilter(field_name="date", lookup_expr="gte")
+    date_to   = django_filters.DateFilter(field_name="date", lookup_expr="lte")
+
+    class Meta:
+        model  = ActivityBlock
+        fields = ["date", "app_name", "project"]
 
 
 class ImportAhkLogView(APIView):
@@ -133,9 +144,76 @@ class ActivityBlockViewSet(viewsets.ModelViewSet):
     queryset = ActivityBlock.objects.all()
     serializer_class = ActivityBlockSerializer
     filter_backends = [DjangoFilterBackend, OrderingFilter]
-    filterset_fields = ["date", "app_name", "project"]
+    filterset_class = ActivityBlockFilter
     ordering_fields = ["started_at", "date", "app_name"]
     ordering = ["-started_at"]
+
+    @action(detail=False, methods=["post"], url_path="bulk")
+    def bulk(self, request):
+        if "blocks" not in request.data:
+            return Response(
+                {"error": "blocks is verplicht."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        blocks_data = request.data["blocks"]
+        created, updated, saved = [], [], []
+
+        for raw in blocks_data:
+            block_id = raw.get("id")
+            instance = None
+            if block_id is not None:
+                try:
+                    instance = ActivityBlock.objects.get(pk=block_id)
+                except ActivityBlock.DoesNotExist:
+                    pass
+
+            serializer = ActivityBlockSerializer(
+                instance,
+                data={k: v for k, v in raw.items() if k != "id"},
+                partial=instance is not None,
+            )
+            if not serializer.is_valid():
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+            obj = serializer.save()
+            saved.append(ActivityBlockSerializer(obj).data)
+            (updated if instance else created).append(obj)
+
+        deleted_ids = request.data.get("deleted_ids", [])
+        deleted = ActivityBlock.objects.filter(id__in=deleted_ids).delete()[0]
+
+        return Response({
+            "created": len(created),
+            "updated": len(updated),
+            "deleted": deleted,
+            "blocks":  saved,
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["post"], url_path="assign")
+    def assign(self, request):
+        if "block_ids" not in request.data:
+            return Response(
+                {"error": "block_ids is verplicht."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        block_ids  = request.data["block_ids"]
+        project_id = request.data.get("project_id")  # None = koppeling verwijderen
+
+        project = None
+        if project_id is not None:
+            from apps.projects.models import Project
+            try:
+                project = Project.objects.get(pk=project_id)
+            except Project.DoesNotExist:
+                return Response(
+                    {"error": f"Project {project_id} niet gevonden."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+        assigned = ActivityBlock.objects.filter(id__in=block_ids).update(project=project)
+        return Response({"assigned": assigned}, status=status.HTTP_200_OK)
 
 
 class UniqueActivityViewSet(viewsets.ModelViewSet):

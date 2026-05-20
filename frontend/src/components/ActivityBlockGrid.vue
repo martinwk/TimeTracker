@@ -8,7 +8,7 @@
         v-for="day in daysOfWeek"
         :key="day.iso"
         class="py-2 px-1 text-center border-r border-gray-200 last:border-r-0"
-        :class="day.isToday ? 'bg-blue-50' : ''"
+        :class="day.isToday ? 'bg-blue-50' : day.isWeekend ? 'bg-gray-100/70' : ''"
       >
         <div class="text-[11px] uppercase tracking-wide font-semibold text-gray-400">{{ day.weekday }}</div>
         <div
@@ -47,7 +47,7 @@
           class="relative border-r border-gray-200 last:border-r-0 select-none"
           :style="{ height: totalHeight + 'px' }"
           :class="[
-            day.isToday ? 'bg-blue-50/20' : '',
+            day.isToday ? 'bg-blue-50/20' : day.isWeekend ? 'bg-gray-50/60' : '',
             activeResize ? 'cursor-ns-resize' : (activeMove ? 'cursor-grabbing' : 'cursor-crosshair'),
           ]"
           @mousedown="onColumnMouseDown($event, day.iso)"
@@ -176,11 +176,12 @@ const daysOfWeek = computed(() => {
     const iso = toLocalDateStr(d.toISOString())
     return {
       iso,
-      isToday:  iso === todayStr,
-      weekday:  d.toLocaleDateString('nl-NL', { weekday: 'short' }),
-      dayNum:   d.getDate(),
+      isToday:   iso === todayStr,
+      isWeekend: i >= 5,
+      weekday:   d.toLocaleDateString('nl-NL', { weekday: 'short' }),
+      dayNum:    d.getDate(),
       showMonth: i === 0 || d.getDate() === 1,
-      month:    d.toLocaleDateString('nl-NL', { month: 'short' }),
+      month:     d.toLocaleDateString('nl-NL', { month: 'short' }),
     }
   })
 })

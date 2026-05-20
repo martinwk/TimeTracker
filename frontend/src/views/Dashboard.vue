@@ -136,6 +136,7 @@ import { ref, computed, onMounted } from 'vue'
 import { nl } from 'date-fns/locale'
 import { VueDatePicker } from '@vuepic/vue-datepicker'
 import { useActivityBlocksStore } from '@/stores/activityBlocks'
+import { getWeekNumber } from '@/utils/date'
 import ActivityBlockGrid from '@/components/ActivityBlockGrid.vue'
 import ProjectSelector from '@/components/ProjectSelector.vue'
 
@@ -185,14 +186,6 @@ const formatWeekLabel = (dates) => {
     ? `${fmtDay(d)}–${fmtFull(end)}`
     : `${fmtFull(d)} – ${fmtFull(end)}`
   return `Week ${week} · ${range}`
-}
-
-const getWeekNumber = (date) => {
-  const d = new Date(date)
-  d.setHours(0, 0, 0, 0)
-  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7))
-  const yearStart = new Date(d.getFullYear(), 0, 1)
-  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7)
 }
 
 const handleAssign = (projectId) => {

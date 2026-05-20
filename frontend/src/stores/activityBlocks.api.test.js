@@ -419,5 +419,92 @@ describe('activityBlocks store — API', () => {
 
       expect(api.get).toHaveBeenCalled()
     })
+
+    it('vervangt temp-ID door echt backend-ID na succesvolle bulk-POST', async () => {
+      const tempId = Date.now() * 1000 + 540
+      const serverBlock = {
+        id: 42,
+        started_at: makeLocalISO(MONDAY, 9, 0),
+        total_seconds: 900,
+        dominant_title: 'Backend',
+        project: { id: 2, name: 'Backend', color: '#f59e0b' },
+      }
+      store.blocks = [
+        { id: tempId, started_at: makeLocalISO(MONDAY, 9, 0), total_seconds: 900, dominant_title: 'Backend', project: { id: 2, name: 'Backend', color: '#f59e0b' } },
+      ]
+      store.selectedBlocks = [tempId]
+      store.projects = [{ id: 2, name: 'Backend', color: '#f59e0b' }]
+      api.post.mockResolvedValue({ data: { created: 1, updated: 0, deleted: 0, blocks: [serverBlock] } })
+
+      await store.resizeRange(MONDAY, 540, 555, 540, 555, 2)
+
+      expect(store.blocks.some(b => b.id === 42)).toBe(true)
+      expect(store.blocks.some(b => b.id === tempId)).toBe(false)
+      expect(store.selectedBlocks).toContain(42)
+      expect(store.selectedBlocks).not.toContain(tempId)
+    })
+  })
+
+  // ── assignToProject (temp-IDs) ─────────────────────────────────────────────
+  describe('assignToProject — temp-IDs', () => {
+    const project = { id: 5, name: 'Test', color: '#abc' }
+
+    it('roept geen /assign/ aan voor temp-IDs maar POST /activity-blocks/ per blok', async () => {
+      const tempId = Date.now() * 1000 + 540
+      store.blocks = [
+        { id: tempId, started_at: '2024-01-15T09:00:00Z', total_seconds: 900, dominant_title: 'X', project: null },
+      ]
+      store.selectedBlocks = [tempId]
+      store.projects = [project]
+      api.post.mockResolvedValue({ data: { id: 77, started_at: '2024-01-15T09:00:00Z', total_seconds: 900, dominant_title: 'X', project } })
+
+      await store.assignToProject(5)
+
+      expect(api.post).not.toHaveBeenCalledWith('/activities/activity-blocks/assign/', expect.anything())
+      expect(api.post).toHaveBeenCalledWith(
+        '/activities/activity-blocks/',
+        expect.objectContaining({ started_at: '2024-01-15T09:00:00Z', total_seconds: 900, project_id: 5 }),
+      )
+    })
+
+    it('vervangt temp-blok in store door serverblok na POST', async () => {
+      const tempId = Date.now() * 1000 + 540
+      store.blocks = [
+        { id: tempId, started_at: '2024-01-15T09:00:00Z', total_seconds: 900, dominant_title: 'X', project: null },
+      ]
+      store.selectedBlocks = [tempId]
+      store.projects = [project]
+      const serverBlock = { id: 77, started_at: '2024-01-15T09:00:00Z', total_seconds: 900, dominant_title: 'X', project }
+      api.post.mockResolvedValue({ data: serverBlock })
+
+      await store.assignToProject(5)
+
+      expect(store.blocks.some(b => b.id === 77)).toBe(true)
+      expect(store.blocks.some(b => b.id === tempId)).toBe(false)
+    })
+
+    it('stuurt echte IDs via /assign/ en temp-IDs via POST in één aanroep', async () => {
+      const tempId = Date.now() * 1000 + 540
+      store.blocks = [
+        { id: 1,      started_at: '2024-01-15T09:00:00Z', total_seconds: 900, dominant_title: 'A', project: null },
+        { id: tempId, started_at: '2024-01-15T09:15:00Z', total_seconds: 900, dominant_title: 'B', project: null },
+      ]
+      store.selectedBlocks = [1, tempId]
+      store.projects = [project]
+      api.post
+        .mockResolvedValueOnce({ data: { assigned: 1 } }) // /assign/
+        .mockResolvedValueOnce({ data: { id: 88, started_at: '2024-01-15T09:15:00Z', total_seconds: 900, dominant_title: 'B', project } })
+
+      await store.assignToProject(5)
+
+      expect(api.post).toHaveBeenCalledWith('/activities/activity-blocks/assign/', {
+        block_ids: [1],
+        project_id: 5,
+      })
+      expect(api.post).toHaveBeenCalledWith(
+        '/activities/activity-blocks/',
+        expect.objectContaining({ project_id: 5 }),
+      )
+    })
   })
 })

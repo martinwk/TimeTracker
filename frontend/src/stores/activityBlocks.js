@@ -403,16 +403,21 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
         })
       }
 
-      for (const tempId of tempIds) {
-        const block = blocks.value.find(b => b.id === tempId)
-        if (!block) continue
-        const res = await api.post('/activities/activity-blocks/', {
-          started_at:    block.started_at,
-          total_seconds: block.total_seconds,
-          project_id:    projectId,
+      const tempResults = await Promise.all(
+        tempIds.map(tempId => {
+          const block = blocks.value.find(b => b.id === tempId)
+          if (!block) return Promise.resolve(null)
+          return api.post('/activities/activity-blocks/', {
+            started_at:    block.started_at,
+            total_seconds: block.total_seconds,
+            project_id:    projectId,
+          }).then(res => ({ tempId, data: res.data }))
         })
-        const idx = blocks.value.findIndex(b => b.id === tempId)
-        if (idx >= 0) blocks.value[idx] = res.data
+      )
+      for (const result of tempResults) {
+        if (!result) continue
+        const idx = blocks.value.findIndex(b => b.id === result.tempId)
+        if (idx >= 0) blocks.value[idx] = result.data
       }
     } catch {
       await fetchWeekBlocks() // terug naar server-staat (rollback optimistische update)

@@ -151,7 +151,7 @@
 <script setup>
 import { computed, onMounted } from 'vue'
 import { useActivityBlocksStore } from '@/stores/activityBlocks'
-import { toLocalDateStr, parseLocalDate } from '@/utils/date'
+import { toLocalDateStr, parseLocalDate, getWeekNumber } from '@/utils/date'
 
 const store = useActivityBlocksStore()
 
@@ -182,14 +182,6 @@ const weekLabel = computed(() => {
     : `${fmtFull(monday)} – ${fmtFull(sunday)}`
   return `Week ${weekNr} · ${range}`
 })
-
-const getWeekNumber = (date) => {
-  const d = new Date(date)
-  d.setHours(0, 0, 0, 0)
-  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7))
-  const yearStart = new Date(d.getFullYear(), 0, 1)
-  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7)
-}
 
 // ── Matrix opbouwen ────────────────────────────────────────────────────────
 // { projectId | 'onbekend': { 'YYYY-MM-DD': seconds } }

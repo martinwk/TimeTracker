@@ -41,7 +41,7 @@ TimeTracker/
 │       └── projects/         # Project model
 └── frontend/
     └── src/
-        ├── views/            # Dashboard, Projects, Stats
+        ├── views/            # Dashboard, Projects, Weekstaat, Stats
         ├── components/       # ActivityBlockGrid, ActivityBlock, ProjectSelector
         ├── stores/           # activityBlocks.js (Pinia)
         └── api/              # Axios client (baseURL: http://localhost:8000/api)
@@ -106,10 +106,9 @@ pytest
 
 ## Huidige status
 
-Backend en frontend zijn volledig gekoppeld. Drag-interface werkt (verslepen, verkleinen/vergroten, rangeslecties, projecttoewijzing) en slaat op via de API. Mock data is verwijderd.
+Backend en frontend zijn volledig gekoppeld. Drag-interface werkt (verslepen, verkleinen/vergroten, rangeslecties, projecttoewijzing) en slaat op via de API. Mock data is verwijderd. Projectenpagina (CRUD) en Weekstaat (uren-per-project-matrix) zijn beschikbaar.
 
 Nog te doen:
-- Projectenpagina (CRUD)
 - Statistiekenpagina
 
 ## Regex-regels uitbreiden

@@ -23,7 +23,7 @@ TimeTracker/
 │       └── projects/     # projects and time entries
 └── frontend/         # Vue 3 + Vite + Pinia + Tailwind CSS 4
     └── src/
-        ├── views/        # Dashboard, Projects, Stats pages
+        ├── views/        # Dashboard, Projects, Weekstaat, Stats pages
         ├── components/   # ActivityBlockGrid, ActivityBlock, etc.
         ├── stores/       # activityBlocks.js (central Pinia store)
         └── api/          # Axios client (base URL: http://localhost:8000/api)
@@ -91,13 +91,13 @@ Backend is complete (models, importer, aggregator, rule engine, DRF API). Fronte
 
 **Serializer:** `project` is a nested read-only object `{ id, name, color }`; write via `project_id` (write-only FK field).
 
-**Test coverage:** 138 backend tests (pytest), 64 frontend tests (Vitest).
+**Test coverage:** 138 backend tests (pytest), 177 frontend tests (Vitest).
 
 **Bulk endpoint — ID-onderscheid:** Temp-IDs (aangemaakt in de frontend met `Date.now() * 1000 + m`) zijn > 1e12. Echte backend-IDs zijn < 1e12. De frontend stuurt alleen echte IDs mee in `deleted_ids`.
 
 Key TODO:
 
-- Stats view
+- Stats view (Weekstaat en Projects zijn klaar)
 - **Weekstaat: round to quarter-hours.** `total_seconds` on aggregator blocks represents overlap time, not wall-clock duration. The Weekstaat matrix should round each cell to the nearest quarter-hour before summing, so 3600 s → 1 u and 5400 s → 1,5 u are consistent with what the user sees on the grid.
 - **Investigate: hours total mismatch.** A block that visually spans 1.5 h showed as 16 separate quarter-blocks in the Dashboard and reported 4 h in Weekstaat. Likely caused by stale/duplicate blocks from earlier frontend versions that sent temp-IDs to the assign endpoint (now fixed). Worth adding a management command that compares the sum of `total_seconds` within a contiguous assigned group against the group's wall-clock span, and flags groups where they diverge significantly.
 
@@ -188,4 +188,5 @@ Frontend tests (Vitest) live next to their source files:
 - [frontend/src/stores/activityBlocks.js](frontend/src/stores/activityBlocks.js) — central Pinia store (fully wired to API; no mock data)
 - [frontend/src/components/ActivityBlockGrid.vue](frontend/src/components/ActivityBlockGrid.vue) — interactive timeline grid
 - [frontend/src/components/ActivityBlock.vue](frontend/src/components/ActivityBlock.vue) — individual block with resize handles
+- [frontend/src/utils/date.js](frontend/src/utils/date.js) — date helpers (parseLocalDate, toLocalDateStr, makeLocalISO, getWeekNumber)
 - [frontend/src/api/api.js](frontend/src/api/api.js) — Axios client setup

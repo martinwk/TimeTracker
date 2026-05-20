@@ -215,4 +215,30 @@ describe('activityBlocks store', () => {
       expect(store.selectedBlocks).toHaveLength(0)
     })
   })
+
+  // ══════════════════════════════════════════════════════════════
+  // selectBlocks
+  // ══════════════════════════════════════════════════════════════
+  describe('selectBlocks', () => {
+    it('adds ids to selectedBlocks', () => {
+      store.blocks = [makeBlock(1, ISO, 9, 0, 30), makeBlock(2, ISO, 10, 0, 30)]
+      store.selectBlocks([1, 2])
+      expect(store.selectedBlocks).toEqual(expect.arrayContaining([1, 2]))
+    })
+
+    it('does not duplicate already-selected ids', () => {
+      store.blocks = [makeBlock(1, ISO, 9, 0, 30), makeBlock(2, ISO, 10, 0, 30)]
+      store.selectedBlocks = [1]
+      store.selectBlocks([1, 2])
+      expect(store.selectedBlocks).toHaveLength(2)
+      expect(store.selectedBlocks.filter(id => id === 1)).toHaveLength(1)
+    })
+
+    it('keeps existing selection intact', () => {
+      store.blocks = [makeBlock(1, ISO, 9, 0, 30), makeBlock(2, ISO, 10, 0, 30), makeBlock(3, ISO, 11, 0, 30)]
+      store.selectedBlocks = [3]
+      store.selectBlocks([1, 2])
+      expect(store.selectedBlocks).toEqual(expect.arrayContaining([1, 2, 3]))
+    })
+  })
 })

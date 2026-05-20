@@ -41,13 +41,20 @@ const makeEmptyBlock = (id, startHour, startMin) => ({
 })
 
 // Toegewezen blok: heeft project
-const makeProjectBlock = (id, startHour, startMin, project) => ({
+const makeProjectBlock = (id, startHour, startMin, project, activities = []) => ({
   id,
   started_at:     makeLocalISO(ISO, startHour, startMin),
+  ended_at:       makeLocalISO(ISO, startHour, startMin + 15),
   total_seconds:  900,
+  block_minutes:  15,
   dominant_title: project.name,
   project,
-  unique_activities: [],
+  unique_activities: activities.map((ua, i) => ({
+    id:            id * 100 + i,
+    raw_title:     ua.title,
+    app_name:      'Test',
+    total_seconds: ua.seconds,
+  })),
 })
 
 // ── getTopActivities ──────────────────────────────────────────────────────────
@@ -355,5 +362,68 @@ describe('activityBlocks store — merge na opeenvolgende project-toewijzing', (
     const day = store.mergedBlocksByDay[ISO]
     expect(day).toHaveLength(1)
     expect(day[0].blocks).toHaveLength(2)
+  })
+})
+
+// ── getTopActivitiesForIds ────────────────────────────────────────────────────
+describe('activityBlocks store — getTopActivitiesForIds', () => {
+  let store
+  const P = { id: 1, name: 'Alpha', color: '#aaa' }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    store = useActivityBlocksStore()
+  })
+
+  it('geeft activiteiten terug voor een toegewezen blok', () => {
+    store.blocks = [
+      makeProjectBlock(1, 9, 0, P, [
+        { title: 'VS Code', seconds: 600 },
+        { title: 'Chrome',  seconds: 300 },
+      ]),
+    ]
+    const result = store.getTopActivitiesForIds([1])
+    expect(result).toHaveLength(2)
+    expect(result[0].title).toBe('VS Code')
+    expect(result[0].seconds).toBe(600)
+  })
+
+  it('sorteert op seconden aflopend en beperkt tot n=3', () => {
+    store.blocks = [
+      makeProjectBlock(1, 9, 0, P, [
+        { title: 'A', seconds: 100 },
+        { title: 'B', seconds: 400 },
+        { title: 'C', seconds: 200 },
+        { title: 'D', seconds: 300 },
+      ]),
+    ]
+    const result = store.getTopActivitiesForIds([1])
+    expect(result).toHaveLength(3)
+    expect(result.map(r => r.title)).toEqual(['B', 'D', 'C'])
+  })
+
+  it('combineert activiteiten over meerdere blokken', () => {
+    store.blocks = [
+      makeProjectBlock(1, 9,  0, P, [{ title: 'VS Code', seconds: 300 }]),
+      makeProjectBlock(2, 9, 15, P, [{ title: 'VS Code', seconds: 200 }, { title: 'Chrome', seconds: 100 }]),
+    ]
+    const result = store.getTopActivitiesForIds([1, 2])
+    expect(result[0]).toEqual({ title: 'VS Code', seconds: 500 })
+    expect(result[1]).toEqual({ title: 'Chrome',  seconds: 100 })
+  })
+
+  it('negeert blokken die niet in de ids-lijst staan', () => {
+    store.blocks = [
+      makeProjectBlock(1, 9,  0, P, [{ title: 'VS Code', seconds: 600 }]),
+      makeProjectBlock(2, 9, 15, P, [{ title: 'Chrome',  seconds: 400 }]),
+    ]
+    const result = store.getTopActivitiesForIds([1])
+    expect(result).toHaveLength(1)
+    expect(result[0].title).toBe('VS Code')
+  })
+
+  it('geeft [] terug voor blokken zonder unique_activities', () => {
+    store.blocks = [makeProjectBlock(1, 9, 0, P)]
+    expect(store.getTopActivitiesForIds([1])).toEqual([])
   })
 })

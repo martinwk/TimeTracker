@@ -123,6 +123,7 @@
         :slot-info="suggestion.slotInfo"
         :position="suggestion.position"
         :activities="suggestion.activities ?? []"
+        :title="suggestion.title"
         @create="onCreateBlock"
         @close="suggestion = null"
       />
@@ -357,6 +358,8 @@ const onMoveStart = ({ event, blocks }, iso) => {
     previewIso:     iso,
     previewStart:   origStart,
     moved:          false,
+    clickX:         event.clientX,
+    clickY:         event.clientY,
   }
 
   window.addEventListener('mousemove', onMoveDragMove)
@@ -388,8 +391,21 @@ const onMoveDragUp = () => {
   activeMove.value = null
 
   if (!move.moved) {
-    // Geen beweging → toggle selectie
-    store.toggleMany(move.blockIds)
+    if (move.projectId !== null) {
+      // Toegewezen blok: toon heroewijzings-popup
+      store.selectBlocks(move.blockIds)
+      const containerRect = gridEl.value.getBoundingClientRect()
+      const popupTop  = move.clickY - containerRect.top + gridEl.value.scrollTop + 8
+      const popupLeft = Math.min(move.clickX - containerRect.left + 8, containerRect.width - 240)
+      const position  = { top: popupTop + 'px', left: popupLeft + 'px' }
+      const rangeStart = move.origStartMin
+      const activities = store.getTopActivitiesForIds(move.blockIds)
+      const slotInfo   = { iso: move.origIso, hour: Math.floor(rangeStart / 60), minute: rangeStart % 60 }
+      suggestion.value = { slotInfo, position, isRange: true, activities, title: 'Opnieuw toewijzen' }
+    } else {
+      // Ongeselecteerd blok zonder project → toggle selectie
+      store.toggleMany(move.blockIds)
+    }
     return
   }
 

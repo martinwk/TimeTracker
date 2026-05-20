@@ -118,6 +118,12 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
     }
   }
 
+  const selectBlocks = (ids) => {
+    for (const id of ids) {
+      if (!selectedBlocks.value.includes(id)) selectedBlocks.value.push(id)
+    }
+  }
+
   const selectAll = () => {
     selectedBlocks.value = blocks.value.map(b => b.id)
   }
@@ -464,6 +470,22 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
       .map(([title, seconds]) => ({ title, seconds }))
   }
 
+  // Geeft top-N activiteiten terug voor specifieke block-IDs, ongeacht toewijzing.
+  const getTopActivitiesForIds = (ids, n = 3) => {
+    const titleSecs = {}
+    for (const block of blocks.value) {
+      if (!ids.includes(block.id)) continue
+      if (!block.unique_activities?.length) continue
+      for (const ua of block.unique_activities) {
+        titleSecs[ua.raw_title] = (titleSecs[ua.raw_title] ?? 0) + ua.total_seconds
+      }
+    }
+    return Object.entries(titleSecs)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, n)
+      .map(([title, seconds]) => ({ title, seconds }))
+  }
+
   const goToPrevWeek = () => {
     const d = parseLocalDate(currentDate.value)
     d.setDate(d.getDate() - 7)
@@ -481,10 +503,10 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
   return {
     blocks, projects, selectedBlocks, currentDate,
     isLoading, error, unassignedBlocks, mergedBlocksByDay, activityIndicatorsByDay,
-    toggleBlock, toggleMany,
+    toggleBlock, toggleMany, selectBlocks,
     selectAll, selectUnassigned, clearSelection, selectOrCreateRange,
     fetchWeekBlocks, fetchProjects, createBlock, assignToProject, applyRules,
     goToPrevWeek, goToNextWeek,
-    resizeRange, moveBlocks, getTopActivities,
+    resizeRange, moveBlocks, getTopActivities, getTopActivitiesForIds,
   }
 })

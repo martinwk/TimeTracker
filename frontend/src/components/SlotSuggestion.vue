@@ -3,7 +3,7 @@
         :style="position" @click.stop>
 
     <div class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">
-      {{ timeLabel }} · Nieuw blok
+      {{ timeLabel }} · {{ title }}
     </div>
 
     <!-- Activiteiten uit AHK-import -->
@@ -64,6 +64,7 @@ const props = defineProps({
   slotInfo:   { type: Object, required: true },   // { iso, hour, minute }
   position:   { type: Object, required: true },   // { top, left }
   activities: { type: Array,  default: () => [] }, // [{ title, seconds }]
+  title:      { type: String, default: 'Nieuw blok' },
 })
 
 const emit = defineEmits(['create', 'close'])

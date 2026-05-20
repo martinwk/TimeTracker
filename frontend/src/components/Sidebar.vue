@@ -7,6 +7,7 @@ const emit = defineEmits(['toggle']);
 
 const navItems = [
   { name: 'Dashboard', path: '/' },
+  { name: 'Weekstaat', path: '/weekstaat' },
   { name: 'Projects', path: '/projects' },
   { name: 'Stats', path: '/stats' },
 ];

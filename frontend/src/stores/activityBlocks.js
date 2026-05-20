@@ -3,51 +3,6 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import api from '@/api/api'
 
-// ── Mock data ──────────────────────────────────────────────────────────────────
-function makeMockBlocks(mondayStr) {
-  const monday = new Date(mondayStr)
-
-  const makeBlock = (id, dayOffset, startHour, startMin, durationMin, title, project = null) => {
-    const d = new Date(monday)
-    d.setDate(d.getDate() + dayOffset)
-    d.setHours(startHour, startMin, 0, 0)
-    return {
-      id,
-      started_at: d.toISOString(),
-      total_seconds: durationMin * 60,
-      dominant_title: title,
-      project,
-    }
-  }
-
-  return [
-    makeBlock(1,  0, 9,  0,  90, 'VS Code – TimeTracker', { id: 1, name: 'TimeTracker', color: '#6366f1' }),
-    makeBlock(2,  0, 10, 30, 30, 'Chrome – GitHub'),
-    makeBlock(3,  0, 11, 0,  60, 'Slack – #dev'),
-    makeBlock(4,  0, 13, 0,  45, 'VS Code – TimeTracker', { id: 1, name: 'TimeTracker', color: '#6366f1' }),
-    makeBlock(5,  0, 14, 0,  120,'VS Code – Django models'),
-    makeBlock(6,  1, 9,  15, 75, 'Chrome – Docs'),
-    makeBlock(7,  1, 11, 0,  30, 'Teams – standup'),
-    makeBlock(8,  1, 14, 30, 90, 'VS Code – API views', { id: 2, name: 'Backend', color: '#f59e0b' }),
-    makeBlock(9,  2, 8,  30, 60, 'Outlook – email'),
-    makeBlock(10, 2, 10, 0,  45, 'VS Code – tests', { id: 2, name: 'Backend', color: '#f59e0b' }),
-    makeBlock(11, 2, 13, 15, 105,'Chrome – Stack Overflow'),
-    makeBlock(12, 3, 9,  0,  60, 'VS Code – frontend'),
-    makeBlock(13, 3, 10, 30, 30, 'Figma – wireframes', { id: 3, name: 'Design', color: '#ec4899' }),
-    makeBlock(14, 3, 14, 0,  60, 'VS Code – Vue components'),
-    makeBlock(15, 4, 9,  30, 90, 'VS Code – bugfixes'),
-    makeBlock(16, 4, 11, 30, 30, 'Chrome – localhost'),
-    makeBlock(17, 4, 14, 0,  45, 'Teams – review'),
-  ]
-}
-
-const MOCK_PROJECTS = [
-  { id: 1, name: 'TimeTracker', color: '#6366f1' },
-  { id: 2, name: 'Backend', color: '#f59e0b' },
-  { id: 3, name: 'Design', color: '#ec4899' },
-  { id: 4, name: 'Overig', color: '#64748b' },
-]
-// ──────────────────────────────────────────────────────────────────────────────
 
 import { parseLocalDate, makeLocalISO, toLocalDateStr } from '@/utils/date'
 
@@ -312,7 +267,21 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
     })
 
     try {
-      await postPromise
+      const res = await postPromise
+      const savedBlocks = res.data.blocks ?? []
+
+      // Vervang temp-IDs door echte backend-IDs (server geeft blokken terug in dezelfde volgorde)
+      for (let i = 0; i < Math.min(blocksToSync.length, savedBlocks.length); i++) {
+        const localId = blocksToSync[i].id
+        const saved   = savedBlocks[i]
+        if (!saved || localId === saved.id) continue
+
+        const idx = blocks.value.findIndex(b => b.id === localId)
+        if (idx >= 0) blocks.value[idx] = saved
+
+        const selIdx = selectedBlocks.value.indexOf(localId)
+        if (selIdx >= 0) selectedBlocks.value[selIdx] = saved.id
+      }
     } catch {
       await fetchWeekBlocks()
     }
@@ -422,10 +391,29 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
     selectedBlocks.value = []
 
     try {
-      await api.post('/activities/activity-blocks/assign/', {
-        block_ids: blockIds,
-        project_id: projectId,
-      })
+      // Temp-IDs (> 1e12) bestaan niet in de database; maak ze aan met project meteen ingesteld.
+      // Echte backend-IDs worden via de bulk-assign endpoint bijgewerkt.
+      const realIds = blockIds.filter(id => id < 1e12)
+      const tempIds = blockIds.filter(id => id >= 1e12)
+
+      if (realIds.length > 0) {
+        await api.post('/activities/activity-blocks/assign/', {
+          block_ids:  realIds,
+          project_id: projectId,
+        })
+      }
+
+      for (const tempId of tempIds) {
+        const block = blocks.value.find(b => b.id === tempId)
+        if (!block) continue
+        const res = await api.post('/activities/activity-blocks/', {
+          started_at:    block.started_at,
+          total_seconds: block.total_seconds,
+          project_id:    projectId,
+        })
+        const idx = blocks.value.findIndex(b => b.id === tempId)
+        if (idx >= 0) blocks.value[idx] = res.data
+      }
     } catch {
       await fetchWeekBlocks() // terug naar server-staat (rollback optimistische update)
       error.value = 'Fout bij toewijzen project'

@@ -109,6 +109,27 @@ Key TODO:
 
 **Commit messages:** Always write in English.
 
+**Pre-commit quality check:** Before every commit, analyse all changes since the previous commit (`git diff HEAD`) and perform two assessments:
+
+1. **Code quality** — review each changed function/method/module on:
+   - *Readability:* are names, structure and logic immediately understandable without extra explanation?
+   - *Simplicity:* is there unnecessary complexity, duplication or over-engineering?
+   - *Robustness:* are error cases, edge cases and invalid input handled correctly?
+   - *Consistency:* does the code match the style and conventions of the rest of the codebase?
+
+   Per finding: file + line number, what the problem is, and a concrete improvement proposal.
+
+2. **Test coverage** — for each changed function/method, verify that a corresponding test exists that:
+   - verifies the expected happy-path behaviour
+   - covers at least one relevant edge case or error path
+   - is descriptive enough to serve as documentation (clear test name, arrange/act/assert structure)
+
+   Per missing or insufficient test: what should be tested and why.
+
+Conclude with a summary: how many changes are qualitatively sound, how many need attention, and what is the most important action to pick up now.
+
+**If any findings are reported (missing tests or quality issues): do not commit. Present the findings and explicitly ask what to do with each issue before proceeding.**
+
 ## Terminal
 
 Use **Git Bash** (not PowerShell or cmd) for all shell commands in this project.
@@ -135,6 +156,25 @@ Frontend dev server proxies to `http://localhost:8000`. Both must run simultaneo
 cd backend
 pytest
 ```
+
+Backend tests live in:
+
+- `backend/apps/activities/tests.py` — API/view tests for activities
+- `backend/apps/activities/test_aggregator.py` — aggregator logic
+- `backend/apps/activities/test_importer.py` — AHK log importer
+- `backend/apps/activities/test_rule_engine.py` — rule engine
+- `backend/apps/projects/tests.py` — API/view tests for projects
+
+Frontend tests (Vitest) live next to their source files:
+
+- `frontend/src/stores/activityBlocks.test.js` — store state & mutations
+- `frontend/src/stores/activityBlocks.logic.test.js` — computed/logic
+- `frontend/src/stores/activityBlocks.api.test.js` — API integration
+- `frontend/src/stores/projects.test.js` — projects store
+- `frontend/src/components/ActivityBlock.test.js` — ActivityBlock component
+- `frontend/src/views/Projects.test.js` — Projects view
+- `frontend/src/views/Weekstaat.test.js` — Weekstaat view
+- `frontend/src/utils/date.test.js` — date utilities
 
 ---
 

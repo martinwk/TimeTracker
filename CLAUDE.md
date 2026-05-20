@@ -68,7 +68,9 @@ AHK window log (text file)
 
 **App name extraction:** Heuristic — tries "Document - AppName" or "Page — Firefox" separators, falls back to full title. Enables grouping by app despite varying window titles.
 
-**Visual merging:** Adjacent blocks with the same project merge visually in `mergedBlocksByDay` (computed property in Pinia store). Selection and mutations still operate on individual blocks.
+**Visual merging:** Adjacent blocks with the same project merge visually in `mergedBlocksByDay` (computed property in Pinia store). Selection and mutations still operate on individual blocks. `blocksByDay` no longer exists as a separate computed — it's inlined.
+
+**Resize/move via primitives (ontwerp B):** The grid passes only primitive values to store actions — never object references. `resizeRange(iso, oldStartMin, oldEndMin, newStartMin, newEndMin, projectId)` and `moveBlocks(blockIds, targetIso, deltaMin)` look up the blocks themselves. This avoids stale references to computed outputs. The grid's `window` mousemove listener must NOT be blocked by `.stop` on child element events — `ActivityBlock` uses `@mousemove` (no `.stop`) for this reason.
 
 **UTC storage, local display:** All timestamps stored UTC in Django. Frontend converts to Europe/Amsterdam for display.
 
@@ -76,7 +78,7 @@ AHK window log (text file)
 
 ## Current state
 
-Backend is complete (models, importer, aggregator, rule engine, DRF API). Frontend store is fully wired to the live API — mock data (`makeMockBlocks()`) is still present for reference but no longer used in production flows.
+Backend is complete (models, importer, aggregator, rule engine, DRF API). Frontend is fully wired to the API — mock data has been removed. The full drag interaction layer (resize, move, drag-select, project assign) works and persists to the backend.
 
 **API contract (ActivityBlock):**
 - `GET /api/activity-blocks/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD` — fetch week
@@ -94,9 +96,10 @@ Backend is complete (models, importer, aggregator, rule engine, DRF API). Fronte
 **Bulk endpoint — ID-onderscheid:** Temp-IDs (aangemaakt in de frontend met `Date.now() * 1000 + m`) zijn > 1e12. Echte backend-IDs zijn < 1e12. De frontend stuurt alleen echte IDs mee in `deleted_ids`.
 
 Key TODO:
-- Projects view (CRUD)
+
 - Stats view
-- Remove `makeMockBlocks()` mock data
+- **Weekstaat: round to quarter-hours.** `total_seconds` on aggregator blocks represents overlap time, not wall-clock duration. The Weekstaat matrix should round each cell to the nearest quarter-hour before summing, so 3600 s → 1 u and 5400 s → 1,5 u are consistent with what the user sees on the grid.
+- **Investigate: hours total mismatch.** A block that visually spans 1.5 h showed as 16 separate quarter-blocks in the Dashboard and reported 4 h in Weekstaat. Likely caused by stale/duplicate blocks from earlier frontend versions that sent temp-IDs to the assign endpoint (now fixed). Worth adding a management command that compares the sum of `total_seconds` within a contiguous assigned group against the group's wall-clock span, and flags groups where they diverge significantly.
 
 ---
 
@@ -142,7 +145,7 @@ pytest
 - [backend/apps/activities/aggregator.py](backend/apps/activities/aggregator.py) — block aggregation logic
 - [backend/apps/activities/rule_engine.py](backend/apps/activities/rule_engine.py) — auto-assignment rules
 - [backend/apps/activities/views.py](backend/apps/activities/views.py) — DRF viewsets
-- [frontend/src/stores/activityBlocks.js](frontend/src/stores/activityBlocks.js) — central Pinia store (fully wired to API; mock data still present but unused)
+- [frontend/src/stores/activityBlocks.js](frontend/src/stores/activityBlocks.js) — central Pinia store (fully wired to API; no mock data)
 - [frontend/src/components/ActivityBlockGrid.vue](frontend/src/components/ActivityBlockGrid.vue) — interactive timeline grid
 - [frontend/src/components/ActivityBlock.vue](frontend/src/components/ActivityBlock.vue) — individual block with resize handles
 - [frontend/src/api/api.js](frontend/src/api/api.js) — Axios client setup

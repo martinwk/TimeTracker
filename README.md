@@ -106,13 +106,11 @@ pytest
 
 ## Huidige status
 
-Backend grotendeels klaar (modellen, importer, aggregator, regelengine, API). Frontend heeft een volledig interactieve UI maar **alle API-aanroepen zijn momenteel uitgecommentarieerd** — de store gebruikt mockdata. Volgende stap: frontend koppelen aan de live API.
+Backend en frontend zijn volledig gekoppeld. Drag-interface werkt (verslepen, verkleinen/vergroten, rangeslecties, projecttoewijzing) en slaat op via de API. Mock data is verwijderd.
 
 Nog te doen:
-- API-aanroepen activeren in `frontend/src/stores/activityBlocks.js`
 - Projectenpagina (CRUD)
 - Statistiekenpagina
-- Backend API-tests uitbreiden
 
 ## Regex-regels uitbreiden
 

@@ -143,6 +143,52 @@ describe('activityBlocks store — API', () => {
     })
   })
 
+  // ── assignToProject(null) — ontkoppelen ───────────────────────────────────
+  describe('assignToProject — ontkoppelen (null)', () => {
+    it('roept bulk-assign aan met project_id: null', async () => {
+      const project = { id: 5, name: 'Test', color: '#abc' }
+      store.blocks = [
+        { id: 1, started_at: '2024-01-15T09:00:00Z', total_seconds: 3600, dominant_title: 'X', project },
+      ]
+      store.selectedBlocks = [1]
+
+      api.post.mockResolvedValue({ data: { assigned: 1 } })
+      await store.assignToProject(null)
+
+      expect(api.post).toHaveBeenCalledWith('/activities/activity-blocks/assign/', {
+        block_ids:  [1],
+        project_id: null,
+      })
+    })
+
+    it('zet block.project op null en leegt de selectie', async () => {
+      const project = { id: 5, name: 'Test', color: '#abc' }
+      store.blocks = [
+        { id: 1, started_at: '2024-01-15T09:00:00Z', total_seconds: 3600, dominant_title: 'X', project },
+      ]
+      store.selectedBlocks = [1]
+
+      api.post.mockResolvedValue({ data: { assigned: 1 } })
+      await store.assignToProject(null)
+
+      expect(store.blocks[0].project).toBeNull()
+      expect(store.selectedBlocks).toHaveLength(0)
+    })
+
+    it('verwijdert temp-ID blokken uit de store bij ontkoppelen', async () => {
+      const tempId = Date.now() * 1000 + 1
+      const project = { id: 5, name: 'Test', color: '#abc' }
+      store.blocks = [
+        { id: tempId, started_at: '2024-01-15T09:00:00Z', total_seconds: 900, dominant_title: 'X', project },
+      ]
+      store.selectedBlocks = [tempId]
+
+      await store.assignToProject(null)
+
+      expect(store.blocks.some(b => b.id === tempId)).toBe(false)
+    })
+  })
+
   // ── moveBlocks ─────────────────────────────────────────────────────────────
   describe('moveBlocks', () => {
     const block = {

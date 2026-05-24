@@ -124,7 +124,7 @@
     <!-- Project selector modal -->
     <ProjectSelector
       v-if="showProjectSelector"
-      @close="showProjectSelector = false"
+      @close="showProjectSelector = false; store.clearSelection()"
       @assign="handleAssign"
     />
 

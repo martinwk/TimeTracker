@@ -124,8 +124,9 @@
         :position="suggestion.position"
         :activities="suggestion.activities ?? []"
         :title="suggestion.title"
+        :can-unassign="suggestion.canUnassign ?? false"
         @create="onCreateBlock"
-        @close="suggestion = null"
+        @close="closeSuggestion"
       />
 
       <!-- Hover tooltip: activiteiten in een slot -->
@@ -401,7 +402,7 @@ const onMoveDragUp = () => {
       const rangeStart = move.origStartMin
       const activities = store.getTopActivitiesForIds(move.blockIds)
       const slotInfo   = { iso: move.origIso, hour: Math.floor(rangeStart / 60), minute: rangeStart % 60 }
-      suggestion.value = { slotInfo, position, isRange: true, activities, title: 'Opnieuw toewijzen' }
+      suggestion.value = { slotInfo, position, isRange: true, activities, title: 'Opnieuw toewijzen', canUnassign: true }
     } else {
       // Ongeselecteerd blok zonder project → toggle selectie
       store.toggleMany(move.blockIds)
@@ -566,9 +567,14 @@ const onCreateBlock = ({ projectId, slotInfo }) => {
   suggestion.value = null
 }
 
+const closeSuggestion = () => {
+  suggestion.value = null
+  store.clearSelection()
+}
+
 const onOutsideClick = (e) => {
   if (suggestion.value && !e.target.closest('.slot-suggestion')) {
-    suggestion.value = null
+    closeSuggestion()
   }
 }
 onMounted(() => document.addEventListener('mousedown', onOutsideClick))

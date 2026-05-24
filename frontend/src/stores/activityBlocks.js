@@ -384,8 +384,10 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
   }
 
   const assignToProject = async (projectId) => {
-    const project = projects.value.find(p => p.id === projectId)
-    if (!project) return
+    const project = projectId !== null
+      ? projects.value.find(p => p.id === projectId)
+      : null
+    if (projectId !== null && !project) return
 
     const blockIds = [...selectedBlocks.value]
 
@@ -397,8 +399,6 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
     selectedBlocks.value = []
 
     try {
-      // Temp-IDs (> 1e12) bestaan niet in de database; maak ze aan met project meteen ingesteld.
-      // Echte backend-IDs worden via de bulk-assign endpoint bijgewerkt.
       const realIds = blockIds.filter(id => id < 1e12)
       const tempIds = blockIds.filter(id => id >= 1e12)
 
@@ -409,21 +409,30 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
         })
       }
 
-      const tempResults = await Promise.all(
-        tempIds.map(tempId => {
-          const block = blocks.value.find(b => b.id === tempId)
-          if (!block) return Promise.resolve(null)
-          return api.post('/activities/activity-blocks/', {
-            started_at:    block.started_at,
-            total_seconds: block.total_seconds,
-            project_id:    projectId,
-          }).then(res => ({ tempId, data: res.data }))
-        })
-      )
-      for (const result of tempResults) {
-        if (!result) continue
-        const idx = blocks.value.findIndex(b => b.id === result.tempId)
-        if (idx >= 0) blocks.value[idx] = result.data
+      if (projectId === null) {
+        // Temp-ID blokken ontkoppelen: verwijder ze (bestaan niet in backend)
+        for (const tempId of tempIds) {
+          const idx = blocks.value.findIndex(b => b.id === tempId)
+          if (idx >= 0) blocks.value.splice(idx, 1)
+        }
+      } else {
+        // Temp-IDs (> 1e12) bestaan niet in de database; maak ze aan met project meteen ingesteld.
+        const tempResults = await Promise.all(
+          tempIds.map(tempId => {
+            const block = blocks.value.find(b => b.id === tempId)
+            if (!block) return Promise.resolve(null)
+            return api.post('/activities/activity-blocks/', {
+              started_at:    block.started_at,
+              total_seconds: block.total_seconds,
+              project_id:    projectId,
+            }).then(res => ({ tempId, data: res.data }))
+          })
+        )
+        for (const result of tempResults) {
+          if (!result) continue
+          const idx = blocks.value.findIndex(b => b.id === result.tempId)
+          if (idx >= 0) blocks.value[idx] = result.data
+        }
       }
     } catch {
       await fetchWeekBlocks() // terug naar server-staat (rollback optimistische update)

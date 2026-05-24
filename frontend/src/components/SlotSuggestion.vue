@@ -46,6 +46,16 @@
       </button>
     </div>
 
+    <!-- Koppeling verwijderen -->
+    <div v-if="canUnassign" class="border-t border-gray-100 pt-2 mt-1">
+      <button
+        @click="emit('create', { projectId: null, slotInfo })"
+        class="w-full text-left text-xs text-red-400 hover:text-red-600 transition-colors px-2 py-1"
+      >
+        Koppeling verwijderen
+      </button>
+    </div>
+
     <!-- Annuleren -->
     <button
       @click="emit('close')"
@@ -57,18 +67,23 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useActivityBlocksStore } from '@/stores/activityBlocks'
 
 const props = defineProps({
-  slotInfo:   { type: Object, required: true },   // { iso, hour, minute }
-  position:   { type: Object, required: true },   // { top, left }
-  activities: { type: Array,  default: () => [] }, // [{ title, seconds }]
-  title:      { type: String, default: 'Nieuw blok' },
+  slotInfo:    { type: Object,  required: true },   // { iso, hour, minute }
+  position:    { type: Object,  required: true },   // { top, left }
+  activities:  { type: Array,   default: () => [] }, // [{ title, seconds }]
+  title:       { type: String,  default: 'Nieuw blok' },
+  canUnassign: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['create', 'close'])
 const store = useActivityBlocksStore()
+
+const onKeyDown = (e) => { if (e.key === 'Escape') emit('close') }
+onMounted(() => document.addEventListener('keydown', onKeyDown))
+onUnmounted(() => document.removeEventListener('keydown', onKeyDown))
 
 const timeLabel = computed(() => {
   const h = String(props.slotInfo.hour).padStart(2, '0')

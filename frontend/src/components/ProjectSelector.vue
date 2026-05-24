@@ -53,7 +53,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useActivityBlocksStore } from '@/stores/activityBlocks'
 
 const store = useActivityBlocksStore()
@@ -61,4 +61,8 @@ const projects = computed(() => store.projects)
 const selectedCount = computed(() => store.selectedBlocks.length)
 
 const emit = defineEmits(['close', 'assign'])
+
+const onKeyDown = (e) => { if (e.key === 'Escape') emit('close') }
+onMounted(() => document.addEventListener('keydown', onKeyDown))
+onUnmounted(() => document.removeEventListener('keydown', onKeyDown))
 </script>

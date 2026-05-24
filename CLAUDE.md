@@ -74,6 +74,8 @@ AHK window log (text file)
 
 **UTC storage, local display:** All timestamps stored UTC in Django. Frontend converts to Europe/Amsterdam for display.
 
+**Click on assigned block shows reassignment popup:** Clicking an assigned block (without dragging) opens the `SlotSuggestion` popup with title "Opnieuw toewijzen". Activities are fetched via `getTopActivitiesForIds(blockIds)` — unlike `getTopActivities` which only considers unassigned aggregator blocks, this looks up `unique_activities` by block ID regardless of assignment status. `assignToProject` accepts `null` to unassign (backend `assign/` endpoint also accepts `project_id: null`). Closing any popup (Escape, outside click, Annuleren) clears the selection, which dismisses the toolbar buttons "Wis selectie" and "Toewijzen aan project".
+
 ---
 
 ## Current state
@@ -91,7 +93,7 @@ Backend is complete (models, importer, aggregator, rule engine, DRF API). Fronte
 
 **Serializer:** `project` is a nested read-only object `{ id, name, color }`; write via `project_id` (write-only FK field).
 
-**Test coverage:** 138 backend tests (pytest), 177 frontend tests (Vitest).
+**Test coverage:** 138 backend tests (pytest), 194 frontend tests (Vitest).
 
 **Bulk endpoint — ID-onderscheid:** Temp-IDs (aangemaakt in de frontend met `Date.now() * 1000 + m`) zijn > 1e12. Echte backend-IDs zijn < 1e12. De frontend stuurt alleen echte IDs mee in `deleted_ids`.
 
@@ -100,6 +102,7 @@ Key TODO:
 - Stats view (Weekstaat en Projects zijn klaar)
 - **Weekstaat: round to quarter-hours.** `total_seconds` on aggregator blocks represents overlap time, not wall-clock duration. The Weekstaat matrix should round each cell to the nearest quarter-hour before summing, so 3600 s → 1 u and 5400 s → 1,5 u are consistent with what the user sees on the grid.
 - **Investigate: hours total mismatch.** A block that visually spans 1.5 h showed as 16 separate quarter-blocks in the Dashboard and reported 4 h in Weekstaat. Likely caused by stale/duplicate blocks from earlier frontend versions that sent temp-IDs to the assign endpoint (now fixed). Worth adding a management command that compares the sum of `total_seconds` within a contiguous assigned group against the group's wall-clock span, and flags groups where they diverge significantly.
+- **Investigate: top-drie klopt niet altijd op.** Het blok op 13 maart om 9:45 toonde in de top drie respectievelijk 1, 0 en 0 minuten — bij elkaar veel minder dan de 15 minuten die het blok beslaat. Controleer of de `UniqueActivity`-records voor dat blok correct zijn aangemaakt en of de duur-berekening in de aggregator klopt. Mogelijk worden niet alle `WindowActivity`-records binnen een blok meegeteld.
 
 ---
 
@@ -172,6 +175,8 @@ Frontend tests (Vitest) live next to their source files:
 - `frontend/src/stores/activityBlocks.api.test.js` — API integration
 - `frontend/src/stores/projects.test.js` — projects store
 - `frontend/src/components/ActivityBlock.test.js` — ActivityBlock component
+- `frontend/src/components/SlotSuggestion.test.js` — SlotSuggestion popup (keyboard handling)
+- `frontend/src/components/ProjectSelector.test.js` — ProjectSelector modal (keyboard handling)
 - `frontend/src/views/Projects.test.js` — Projects view
 - `frontend/src/views/Weekstaat.test.js` — Weekstaat view
 - `frontend/src/utils/date.test.js` — date utilities

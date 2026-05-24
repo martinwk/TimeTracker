@@ -300,10 +300,10 @@ const onSelDragUp = (e) => {
   // onderliggende blokken via selectOrCreateRange en gebruik assignToProject.
   if (wasDrag || activities.length > 0) {
     store.selectOrCreateRange(iso, rangeStart, rangeEnd)
-    suggestion.value = { slotInfo, position, isRange: true, activities }
+    suggestion.value = { slotInfo, position, isRange: true, activities, cancelable: true }
   } else {
     // Leeg slot zonder activiteit: maak een nieuw blok aan via createBlock
-    suggestion.value = { slotInfo, position, isRange: false, activities }
+    suggestion.value = { slotInfo, position, isRange: false, activities, cancelable: false }
   }
 }
 
@@ -392,20 +392,24 @@ const onMoveDragUp = () => {
   activeMove.value = null
 
   if (!move.moved) {
-    if (move.projectId !== null) {
-      // Toegewezen blok: toon heroewijzings-popup
-      store.selectBlocks(move.blockIds)
-      const containerRect = gridEl.value.getBoundingClientRect()
-      const popupTop  = move.clickY - containerRect.top + gridEl.value.scrollTop + 8
-      const popupLeft = Math.min(move.clickX - containerRect.left + 8, containerRect.width - 240)
-      const position  = { top: popupTop + 'px', left: popupLeft + 'px' }
-      const rangeStart = move.origStartMin
-      const activities = store.getTopActivitiesForIds(move.blockIds)
-      const slotInfo   = { iso: move.origIso, hour: Math.floor(rangeStart / 60), minute: rangeStart % 60 }
-      suggestion.value = { slotInfo, position, isRange: true, activities, title: 'Opnieuw toewijzen', canUnassign: true }
-    } else {
-      // Ongeselecteerd blok zonder project → toggle selectie
-      store.toggleMany(move.blockIds)
+    // Klik op een blok (met of zonder project): toon toewijzings-popup
+    store.selectBlocks(move.blockIds)
+    const containerRect = gridEl.value.getBoundingClientRect()
+    const popupTop  = move.clickY - containerRect.top + gridEl.value.scrollTop + 8
+    const popupLeft = Math.min(move.clickX - containerRect.left + 8, containerRect.width - 240)
+    const position  = { top: popupTop + 'px', left: popupLeft + 'px' }
+    const rangeStart = move.origStartMin
+    const activities = store.getTopActivitiesForIds(move.blockIds)
+    const slotInfo   = { iso: move.origIso, hour: Math.floor(rangeStart / 60), minute: rangeStart % 60 }
+    const isAssigned = move.projectId !== null
+    suggestion.value = {
+      slotInfo,
+      position,
+      isRange:     true,
+      activities,
+      title:       isAssigned ? 'Opnieuw toewijzen' : 'Toewijzen aan project',
+      canUnassign: isAssigned,
+      cancelable:  false,  // clicking on existing block: don't delete on close
     }
     return
   }
@@ -568,8 +572,13 @@ const onCreateBlock = ({ projectId, slotInfo }) => {
 }
 
 const closeSuggestion = () => {
+  const shouldCancel = suggestion.value?.cancelable ?? false
   suggestion.value = null
-  store.clearSelection()
+  if (shouldCancel) {
+    store.cancelSelection()
+  } else {
+    store.clearSelection()
+  }
 }
 
 const onOutsideClick = (e) => {

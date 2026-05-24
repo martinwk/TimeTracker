@@ -99,6 +99,34 @@ describe('ActivityBlock — interactie', () => {
     expect(payload.edge).toBe('top')
   })
 
+  it('emit move-start in het midden van een klein blok (14px), resize-start bij de rand', async () => {
+    // 14px hoog (15-min blok bij hourHeight=56): edgePx = floor(14/3) = 4
+    // Midden (y=7): geen rand → move-start
+    const wrapper = mountBlock(makeBlock(9, 0, 15))
+    mockRect(wrapper, 14)
+    await wrapper.trigger('mousedown', { button: 0, clientY: 7 })
+    expect(wrapper.emitted('resize-start')).toBeFalsy()
+    expect(wrapper.emitted('move-start')).toBeTruthy()
+  })
+
+  it('emit resize-start aan de bovenrand van een klein blok (14px)', async () => {
+    const wrapper = mountBlock(makeBlock(9, 0, 15))
+    mockRect(wrapper, 14)
+    // y=2 ≤ edgePx=4 → top-rand
+    await wrapper.trigger('mousedown', { button: 0, clientY: 2 })
+    expect(wrapper.emitted('resize-start')).toBeTruthy()
+    expect(wrapper.emitted('resize-start')[0][0].edge).toBe('top')
+  })
+
+  it('emit resize-start aan de onderrand van een klein blok (14px)', async () => {
+    const wrapper = mountBlock(makeBlock(9, 0, 15))
+    mockRect(wrapper, 14)
+    // y=13 ≥ 14-4=10 → bottom-rand
+    await wrapper.trigger('mousedown', { button: 0, clientY: 13 })
+    expect(wrapper.emitted('resize-start')).toBeTruthy()
+    expect(wrapper.emitted('resize-start')[0][0].edge).toBe('bottom')
+  })
+
   it('emit niets bij rechtermuisklik (button=2)', async () => {
     const wrapper = mountBlock(makeBlock(9, 0, 90))
     mockRect(wrapper, 100)

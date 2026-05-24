@@ -132,10 +132,11 @@ const isLargeEnough = computed(() => {
 const nearEdge = ref(null) // 'top' | 'bottom' | null
 
 const getEdge = (event) => {
-  const rect = event.currentTarget.getBoundingClientRect()
-  const y    = event.clientY - rect.top
-  if (y <= EDGE_PX)               return 'top'
-  if (y >= rect.height - EDGE_PX) return 'bottom'
+  const rect     = event.currentTarget.getBoundingClientRect()
+  const edgePx   = Math.min(EDGE_PX, Math.floor(rect.height / 3))
+  const y        = event.clientY - rect.top
+  if (y <= edgePx)                return 'top'
+  if (y >= rect.height - edgePx)  return 'bottom'
   return null
 }
 

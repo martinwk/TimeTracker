@@ -136,6 +136,15 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
     selectedBlocks.value = []
   }
 
+  const cancelSelection = () => {
+    const tempIds = selectedBlocks.value.filter(id => id >= 1e12)
+    for (const tempId of tempIds) {
+      const idx = blocks.value.findIndex(b => b.id === tempId)
+      if (idx >= 0) blocks.value.splice(idx, 1)
+    }
+    selectedBlocks.value = []
+  }
+
   const selectOrCreateRange = (iso, startMin, endMin) => {
     selectedBlocks.value = []
     const dayBlocks = blocks.value.filter(b => toLocalDateStr(b.started_at) === iso)
@@ -390,32 +399,55 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
     if (projectId !== null && !project) return
 
     const blockIds = [...selectedBlocks.value]
+    const realIds  = blockIds.filter(id => id < 1e12)
+    const tempIds  = blockIds.filter(id => id >= 1e12)
 
-    // Optimistisch bijwerken
-    for (const id of blockIds) {
-      const block = blocks.value.find(b => b.id === id)
-      if (block) block.project = project
+    // Onderscheid handmatig vs. aggregator (alleen relevant bij ontkoppelen)
+    const manualIds    = projectId === null ? realIds.filter(id => {
+      const b = blocks.value.find(bl => bl.id === id)
+      return b && (!b.unique_activities || b.unique_activities.length === 0)
+    }) : []
+    const aggregatorIds = projectId === null ? realIds.filter(id => !manualIds.includes(id)) : []
+
+    // Optimistisch bijwerken:
+    // - handmatige blokken en temp-blokken worden verwijderd
+    // - aggregator-blokken krijgen project=null; bij toewijzen krijgen alle blokken het nieuwe project
+    if (projectId === null) {
+      const toDeleteIds = new Set([...manualIds, ...tempIds])
+      blocks.value = blocks.value.filter(b => !toDeleteIds.has(b.id))
+      for (const id of aggregatorIds) {
+        const block = blocks.value.find(b => b.id === id)
+        if (block) block.project = null
+      }
+    } else {
+      for (const id of blockIds) {
+        const block = blocks.value.find(b => b.id === id)
+        if (block) block.project = project
+      }
     }
     selectedBlocks.value = []
 
     try {
-      const realIds = blockIds.filter(id => id < 1e12)
-      const tempIds = blockIds.filter(id => id >= 1e12)
-
-      if (realIds.length > 0) {
-        await api.post('/activities/activity-blocks/assign/', {
-          block_ids:  realIds,
-          project_id: projectId,
-        })
-      }
-
       if (projectId === null) {
-        // Temp-ID blokken ontkoppelen: verwijder ze (bestaan niet in backend)
-        for (const tempId of tempIds) {
-          const idx = blocks.value.findIndex(b => b.id === tempId)
-          if (idx >= 0) blocks.value.splice(idx, 1)
+        if (manualIds.length > 0) {
+          await api.post('/activities/activity-blocks/bulk/', {
+            blocks:      [],
+            deleted_ids: manualIds,
+          })
+        }
+        if (aggregatorIds.length > 0) {
+          await api.post('/activities/activity-blocks/assign/', {
+            block_ids:  aggregatorIds,
+            project_id: null,
+          })
         }
       } else {
+        if (realIds.length > 0) {
+          await api.post('/activities/activity-blocks/assign/', {
+            block_ids:  realIds,
+            project_id: projectId,
+          })
+        }
         // Temp-IDs (> 1e12) bestaan niet in de database; maak ze aan met project meteen ingesteld.
         const tempResults = await Promise.all(
           tempIds.map(tempId => {
@@ -513,7 +545,7 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
     blocks, projects, selectedBlocks, currentDate,
     isLoading, error, unassignedBlocks, mergedBlocksByDay, activityIndicatorsByDay,
     toggleBlock, toggleMany, selectBlocks,
-    selectAll, selectUnassigned, clearSelection, selectOrCreateRange,
+    selectAll, selectUnassigned, clearSelection, cancelSelection, selectOrCreateRange,
     fetchWeekBlocks, fetchProjects, createBlock, assignToProject, applyRules,
     goToPrevWeek, goToNextWeek,
     resizeRange, moveBlocks, getTopActivities, getTopActivitiesForIds,

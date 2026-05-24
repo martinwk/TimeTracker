@@ -93,7 +93,7 @@ Backend is complete (models, importer, aggregator, rule engine, DRF API). Fronte
 
 **Serializer:** `project` is a nested read-only object `{ id, name, color }`; write via `project_id` (write-only FK field).
 
-**Test coverage:** 138 backend tests (pytest), 194 frontend tests (Vitest).
+**Test coverage:** 138 backend tests (pytest), 206 frontend tests (Vitest).
 
 **Bulk endpoint — ID-onderscheid:** Temp-IDs (aangemaakt in de frontend met `Date.now() * 1000 + m`) zijn > 1e12. Echte backend-IDs zijn < 1e12. De frontend stuurt alleen echte IDs mee in `deleted_ids`.
 
@@ -102,7 +102,7 @@ Key TODO:
 - Stats view (Weekstaat en Projects zijn klaar)
 - **Weekstaat: round to quarter-hours.** `total_seconds` on aggregator blocks represents overlap time, not wall-clock duration. The Weekstaat matrix should round each cell to the nearest quarter-hour before summing, so 3600 s → 1 u and 5400 s → 1,5 u are consistent with what the user sees on the grid.
 - **Investigate: hours total mismatch.** A block that visually spans 1.5 h showed as 16 separate quarter-blocks in the Dashboard and reported 4 h in Weekstaat. Likely caused by stale/duplicate blocks from earlier frontend versions that sent temp-IDs to the assign endpoint (now fixed). Worth adding a management command that compares the sum of `total_seconds` within a contiguous assigned group against the group's wall-clock span, and flags groups where they diverge significantly.
-- **Investigate: top-drie klopt niet altijd op.** Het blok op 13 maart om 9:45 toonde in de top drie respectievelijk 1, 0 en 0 minuten — bij elkaar veel minder dan de 15 minuten die het blok beslaat. Controleer of de `UniqueActivity`-records voor dat blok correct zijn aangemaakt en of de duur-berekening in de aggregator klopt. Mogelijk worden niet alle `WindowActivity`-records binnen een blok meegeteld.
+- **Verwacht gedrag: top-drie telt niet op tot 15 min.** Een blok beslaat altijd een vol 15-min slot op de grid, maar `total_seconds` en de `unique_activities` tonen alleen de werkelijk *actieve* (niet-ruis) tijd. Als het slot grotendeels idle was, kan de top drie 1+0+0 min tonen terwijl het blok visueel 15 min groot is — dat is correct. Eventuele verbetering: toon in de UI expliciet het onderscheid tussen wandkloktijd (blokduur) en actieve tijd (total_seconds).
 
 ---
 

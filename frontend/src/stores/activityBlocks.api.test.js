@@ -145,28 +145,60 @@ describe('activityBlocks store — API', () => {
 
   // ── assignToProject(null) — ontkoppelen ───────────────────────────────────
   describe('assignToProject — ontkoppelen (null)', () => {
-    it('roept bulk-assign aan met project_id: null', async () => {
+    it('verwijdert handmatig aangemaakte blokken (geen unique_activities) via bulk/deleted_ids', async () => {
       const project = { id: 5, name: 'Test', color: '#abc' }
       store.blocks = [
-        { id: 1, started_at: '2024-01-15T09:00:00Z', total_seconds: 3600, dominant_title: 'X', project },
+        { id: 1, started_at: '2024-01-15T09:00:00Z', total_seconds: 3600, dominant_title: 'X', project, unique_activities: [] },
       ]
       store.selectedBlocks = [1]
+
+      api.post.mockResolvedValue({ data: { created: 0, updated: 0, deleted: 1, blocks: [] } })
+      await store.assignToProject(null)
+
+      expect(api.post).toHaveBeenCalledWith('/activities/activity-blocks/bulk/', {
+        blocks:      [],
+        deleted_ids: [1],
+      })
+    })
+
+    it('verwijdert handmatig aangemaakte blokken uit de lokale store na bulk-delete', async () => {
+      const project = { id: 5, name: 'Test', color: '#abc' }
+      store.blocks = [
+        { id: 1, started_at: '2024-01-15T09:00:00Z', total_seconds: 3600, dominant_title: 'X', project, unique_activities: [] },
+      ]
+      store.selectedBlocks = [1]
+
+      api.post.mockResolvedValue({ data: { created: 0, updated: 0, deleted: 1, blocks: [] } })
+      await store.assignToProject(null)
+
+      expect(store.blocks.some(b => b.id === 1)).toBe(false)
+      expect(store.selectedBlocks).toHaveLength(0)
+    })
+
+    it('roept bulk-assign aan met project_id: null voor aggregator-blokken (hebben unique_activities)', async () => {
+      const project = { id: 5, name: 'Test', color: '#abc' }
+      store.blocks = [
+        { id: 2, started_at: '2024-01-15T10:00:00Z', total_seconds: 1800, dominant_title: 'Y', project,
+          unique_activities: [{ raw_title: 'VS Code', total_seconds: 1800 }] },
+      ]
+      store.selectedBlocks = [2]
 
       api.post.mockResolvedValue({ data: { assigned: 1 } })
       await store.assignToProject(null)
 
       expect(api.post).toHaveBeenCalledWith('/activities/activity-blocks/assign/', {
-        block_ids:  [1],
+        block_ids:  [2],
         project_id: null,
       })
     })
 
-    it('zet block.project op null en leegt de selectie', async () => {
+    it('zet aggregator-blok.project op null na ontkoppelen', async () => {
       const project = { id: 5, name: 'Test', color: '#abc' }
       store.blocks = [
-        { id: 1, started_at: '2024-01-15T09:00:00Z', total_seconds: 3600, dominant_title: 'X', project },
+        { id: 2, started_at: '2024-01-15T10:00:00Z', total_seconds: 1800, dominant_title: 'Y', project,
+          unique_activities: [{ raw_title: 'VS Code', total_seconds: 1800 }] },
       ]
-      store.selectedBlocks = [1]
+      store.selectedBlocks = [2]
 
       api.post.mockResolvedValue({ data: { assigned: 1 } })
       await store.assignToProject(null)
@@ -179,7 +211,7 @@ describe('activityBlocks store — API', () => {
       const tempId = Date.now() * 1000 + 1
       const project = { id: 5, name: 'Test', color: '#abc' }
       store.blocks = [
-        { id: tempId, started_at: '2024-01-15T09:00:00Z', total_seconds: 900, dominant_title: 'X', project },
+        { id: tempId, started_at: '2024-01-15T09:00:00Z', total_seconds: 900, dominant_title: 'X', project, unique_activities: [] },
       ]
       store.selectedBlocks = [tempId]
 

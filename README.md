@@ -108,7 +108,7 @@ pytest
 
 Backend en frontend zijn volledig gekoppeld. Drag-interface werkt (verslepen, verkleinen/vergroten, rangeselecties, projecttoewijzing) en slaat op via de API. Mock data is verwijderd. Projectenpagina (CRUD) en Weekstaat (uren-per-project-matrix) zijn beschikbaar.
 
-Klikken op een al toegewezen blok toont een heroewijzings-popup met de onderliggende activiteiten. Via "Koppeling verwijderen" in de popup (of via het "Toewijzen aan project"-scherm) kan een blok ook worden losgekoppeld van een project. Popups sluiten met Escape; dit wist ook de selectie.
+Klikken op een toegewezen blok (of een niet-toegewezen blok) toont een toewijzings-/heroewijzings-popup met de onderliggende activiteiten. Via "Koppeling verwijderen" wordt een handmatig aangemaakt blok verwijderd; een aggregator-blok (met AHK-activiteiten) wordt losgekoppeld van het project en verschijnt als grijze achtergrond-indicator. Popups sluiten met Escape; dit wist de selectie en verwijdert eventuele tijdelijke blokken die bij de selectie zijn aangemaakt.
 
 Nog te doen:
 - Statistiekenpagina

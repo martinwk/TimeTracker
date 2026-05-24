@@ -241,4 +241,49 @@ describe('activityBlocks store', () => {
       expect(store.selectedBlocks).toEqual(expect.arrayContaining([1, 2, 3]))
     })
   })
+
+  // ══════════════════════════════════════════════════════════════
+  // cancelSelection
+  // ══════════════════════════════════════════════════════════════
+  describe('cancelSelection', () => {
+    it('verwijdert temp-ID blokken die geselecteerd zijn uit de store', () => {
+      const tempId = Date.now() * 1000 + 1
+      store.blocks = [
+        makeBlock(1, ISO, 9, 0, 30),
+        { id: tempId, started_at: makeLocalISO(ISO, 10, 0), total_seconds: 900, dominant_title: 'Temp', project: null, unique_activities: [] },
+      ]
+      store.selectedBlocks = [1, tempId]
+      store.cancelSelection()
+      expect(store.blocks.some(b => b.id === tempId)).toBe(false)
+    })
+
+    it('behoudt echte blokken (id < 1e12) in de store', () => {
+      const tempId = Date.now() * 1000 + 1
+      store.blocks = [
+        makeBlock(1, ISO, 9, 0, 30),
+        { id: tempId, started_at: makeLocalISO(ISO, 10, 0), total_seconds: 900, dominant_title: 'Temp', project: null, unique_activities: [] },
+      ]
+      store.selectedBlocks = [1, tempId]
+      store.cancelSelection()
+      expect(store.blocks.some(b => b.id === 1)).toBe(true)
+    })
+
+    it('leegt de selectie', () => {
+      store.blocks = [makeBlock(1, ISO, 9, 0, 30)]
+      store.selectedBlocks = [1]
+      store.cancelSelection()
+      expect(store.selectedBlocks).toHaveLength(0)
+    })
+
+    it('verwijdert alleen temp-ID blokken die ook geselecteerd zijn', () => {
+      const tempId = Date.now() * 1000 + 1
+      store.blocks = [
+        makeBlock(1, ISO, 9, 0, 30),
+        { id: tempId, started_at: makeLocalISO(ISO, 10, 0), total_seconds: 900, dominant_title: 'Temp', project: null, unique_activities: [] },
+      ]
+      store.selectedBlocks = [1] // tempId niet geselecteerd
+      store.cancelSelection()
+      expect(store.blocks.some(b => b.id === tempId)).toBe(true)
+    })
+  })
 })

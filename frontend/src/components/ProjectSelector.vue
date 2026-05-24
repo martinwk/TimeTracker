@@ -42,9 +42,10 @@
       <div class="border-t border-gray-100 px-5 py-3">
         <button
           @click="emit('assign', null)"
-          class="w-full text-xs text-gray-400 hover:text-gray-600 transition-colors text-left"
+          class="w-full flex items-center justify-between text-xs text-gray-400 hover:text-gray-600 transition-colors text-left"
         >
-          Koppeling verwijderen
+          <span>Koppeling verwijderen</span>
+          <span class="text-[10px] text-gray-300">(d)</span>
         </button>
       </div>
 
@@ -62,7 +63,10 @@ const selectedCount = computed(() => store.selectedBlocks.length)
 
 const emit = defineEmits(['close', 'assign'])
 
-const onKeyDown = (e) => { if (e.key === 'Escape') emit('close') }
+const onKeyDown = (e) => {
+  if (e.key === 'Escape') emit('close')
+  if (e.key === 'd' || e.key === 'Delete') emit('assign', null)
+}
 onMounted(() => document.addEventListener('keydown', onKeyDown))
 onUnmounted(() => document.removeEventListener('keydown', onKeyDown))
 </script>

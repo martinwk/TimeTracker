@@ -50,18 +50,20 @@
     <div v-if="canUnassign" class="border-t border-gray-100 pt-2 mt-1">
       <button
         @click="emit('create', { projectId: null, slotInfo })"
-        class="w-full text-left text-xs text-red-400 hover:text-red-600 transition-colors px-2 py-1"
+        class="w-full flex items-center justify-between text-xs text-red-400 hover:text-red-600 transition-colors px-2 py-1"
       >
-        Koppeling verwijderen
+        <span>Koppeling verwijderen</span>
+        <span class="text-[10px] text-gray-300 ml-2">(d)</span>
       </button>
     </div>
 
     <!-- Annuleren -->
     <button
       @click="emit('close')"
-      class="mt-2 w-full text-center text-xs text-gray-300 hover:text-gray-500 transition-colors"
+      class="mt-2 w-full flex items-center justify-center gap-1.5 text-xs text-gray-300 hover:text-gray-500 transition-colors"
     >
-      Annuleren
+      <span>Annuleren</span>
+      <span class="text-[10px]">(Esc)</span>
     </button>
   </div>
 </template>
@@ -81,7 +83,12 @@ const props = defineProps({
 const emit = defineEmits(['create', 'close'])
 const store = useActivityBlocksStore()
 
-const onKeyDown = (e) => { if (e.key === 'Escape') emit('close') }
+const onKeyDown = (e) => {
+  if (e.key === 'Escape') emit('close')
+  if ((e.key === 'd' || e.key === 'Delete') && props.canUnassign) {
+    emit('create', { projectId: null, slotInfo: props.slotInfo })
+  }
+}
 onMounted(() => document.addEventListener('keydown', onKeyDown))
 onUnmounted(() => document.removeEventListener('keydown', onKeyDown))
 

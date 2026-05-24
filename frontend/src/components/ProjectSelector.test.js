@@ -27,3 +27,21 @@ describe('ProjectSelector — toetsenbord', () => {
     expect(wrapper.emitted('close')).toBeFalsy()
   })
 })
+
+describe('ProjectSelector — koppeling verwijderen hotkey', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('emit assign met null bij d', async () => {
+    const wrapper = mount(ProjectSelector)
+    await document.dispatchEvent(new KeyboardEvent('keydown', { key: 'd' }))
+    expect(wrapper.emitted('assign')?.[0][0]).toBeNull()
+  })
+
+  it('emit assign met null bij Delete', async () => {
+    const wrapper = mount(ProjectSelector)
+    await document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete' }))
+    expect(wrapper.emitted('assign')?.[0][0]).toBeNull()
+  })
+})

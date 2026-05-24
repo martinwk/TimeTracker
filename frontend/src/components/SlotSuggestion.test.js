@@ -32,3 +32,27 @@ describe('SlotSuggestion — toetsenbord', () => {
     expect(wrapper.emitted('close')).toBeFalsy()
   })
 })
+
+describe('SlotSuggestion — koppeling verwijderen hotkey', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('emit create met projectId: null bij d als canUnassign true is', async () => {
+    const wrapper = mount(SlotSuggestion, { props: { ...defaultProps, canUnassign: true } })
+    await document.dispatchEvent(new KeyboardEvent('keydown', { key: 'd' }))
+    expect(wrapper.emitted('create')?.[0][0]).toEqual({ projectId: null, slotInfo: defaultProps.slotInfo })
+  })
+
+  it('emit create met projectId: null bij Delete als canUnassign true is', async () => {
+    const wrapper = mount(SlotSuggestion, { props: { ...defaultProps, canUnassign: true } })
+    await document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete' }))
+    expect(wrapper.emitted('create')?.[0][0]).toEqual({ projectId: null, slotInfo: defaultProps.slotInfo })
+  })
+
+  it('doet niets bij d als canUnassign false is', async () => {
+    const wrapper = mount(SlotSuggestion, { props: { ...defaultProps, canUnassign: false } })
+    await document.dispatchEvent(new KeyboardEvent('keydown', { key: 'd' }))
+    expect(wrapper.emitted('create')).toBeFalsy()
+  })
+})

@@ -210,10 +210,12 @@ def test_no_overlapping_blocks():
     aggregate_day(TARGET_DATE)
 
     blocks = list(ActivityBlock.objects.order_by("started_at"))
-    for i in range(len(blocks) - 1):
-        assert blocks[i].ended_at <= blocks[i + 1].started_at, (
-            f"Overlap tussen {blocks[i].started_at} en {blocks[i+1].started_at}"
-        )
+    pairs  = list(zip(blocks, blocks[1:]))
+    assert all(a.ended_at <= b.started_at for a, b in pairs), (
+        "Overlappende blokken gevonden: "
+        + ", ".join(f"{a.started_at}↔{b.started_at}" for a, b in pairs
+                    if a.ended_at > b.started_at)
+    )
 
 
 # ── Heraggregatie ─────────────────────────────────────────────────────────────

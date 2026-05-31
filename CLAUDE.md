@@ -14,7 +14,7 @@ A personal time tracking tool that imports AutoHotkey (AHK) window activity logs
 
 Monorepo: Django REST API backend + Vue 3 SPA frontend.
 
-```
+```text
 TimeTracker/
 ├── backend/          # Django 4.2 + DRF
 │   ├── config/       # settings, urls, wsgi
@@ -33,7 +33,7 @@ TimeTracker/
 
 ## Data flow
 
-```
+```text
 AHK window log (text file)
   → POST /api/activities/import/
   → WindowActivity records (raw, immutable)
@@ -48,7 +48,7 @@ AHK window log (text file)
 ## Core models
 
 | Model | Purpose |
-|---|---|
+| --- | --- |
 | `WindowActivity` | Raw AHK log line. Never modified after import. |
 | `ActivityBlock` | Aggregated block (consecutive activities, same app). Has optional FK to Project. |
 | `UniqueActivity` | Distinct window titles within a block, ordered by duration. |
@@ -91,6 +91,7 @@ AHK window log (text file)
 Backend is complete (models, importer, aggregator, rule engine, DRF API). Frontend is fully wired to the API — mock data has been removed. The full drag interaction layer (resize, move, drag-select, project assign) works and persists to the backend.
 
 **API contract (ActivityBlock):**
+
 - `GET /api/activity-blocks/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD` — fetch week
 - `POST /api/activity-blocks/` — create block (requires `started_at`, `total_seconds`; optional `project_id`)
 - `PATCH /api/activity-blocks/{id}/` — update block; `ended_at` and `date` auto-recalculated from `started_at + total_seconds`
@@ -155,6 +156,7 @@ Use **Git Bash** (not PowerShell or cmd) for all shell commands in this project.
 ## Running the project
 
 **Backend:**
+
 ```bash
 cd backend
 source .venv/Scripts/activate
@@ -162,6 +164,7 @@ python manage.py runserver
 ```
 
 **Frontend:**
+
 ```bash
 cd frontend
 npm run dev
@@ -170,6 +173,7 @@ npm run dev
 Frontend dev server proxies to `http://localhost:8000`. Both must run simultaneously.
 
 **Tests (backend):**
+
 ```bash
 cd backend
 pytest

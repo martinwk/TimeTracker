@@ -537,9 +537,8 @@ def test_bulk_assign_sets_project_on_all_blocks(api_client, two_unassigned_block
     )
     assert response.status_code == 200
     assert response.data["assigned"] == 2
-    for block in two_unassigned_blocks:
-        block.refresh_from_db()
-        assert block.project_id == project_alpha.id
+    ids = [b.id for b in two_unassigned_blocks]
+    assert ActivityBlock.objects.filter(id__in=ids, project=project_alpha).count() == 2
 
 
 @pytest.mark.django_db
@@ -1019,8 +1018,7 @@ def test_activity_block_detail_write_only_fields_absent(api_client, activity_blo
     """Write-only velden (project_id) zijn niet zichtbaar in de response."""
     response = api_client.get(f"/api/activities/activity-blocks/{activity_block.id}/")
     assert response.status_code == 200
-    for field in WRITE_ONLY_FIELDS:
-        assert field not in response.data, f"write-only veld '{field}' zit ten onrechte in de response"
+    assert "project_id" not in response.data, "write-only veld 'project_id' zit ten onrechte in de response"
 
 
 @pytest.mark.django_db
@@ -1028,20 +1026,14 @@ def test_activity_block_detail_field_types(api_client, activity_block):
     """Veldtypen kloppen met wat de frontend verwacht."""
     response = api_client.get(f"/api/activities/activity-blocks/{activity_block.id}/")
     d = response.data
-    checks = [
-        ("id",               int),
-        ("app_name",         str),
-        ("total_seconds",    int),
-        ("total_minutes",    float),
-        ("activity_count",   int),
-        ("block_minutes",    int),
-        ("unique_activities", list),
-        ("suggested_projects", list),
-    ]
-    for field, expected_type in checks:
-        assert isinstance(d[field], expected_type), (
-            f"'{field}': verwacht {expected_type.__name__}, kreeg {type(d[field]).__name__} ({d[field]!r})"
-        )
+    assert isinstance(d["id"],                int),   f"'id': verwacht int, kreeg {type(d['id']).__name__}"
+    assert isinstance(d["app_name"],          str),   f"'app_name': verwacht str"
+    assert isinstance(d["total_seconds"],     int),   f"'total_seconds': verwacht int"
+    assert isinstance(d["total_minutes"],     float), f"'total_minutes': verwacht float"
+    assert isinstance(d["activity_count"],    int),   f"'activity_count': verwacht int"
+    assert isinstance(d["block_minutes"],     int),   f"'block_minutes': verwacht int"
+    assert isinstance(d["unique_activities"], list),  f"'unique_activities': verwacht list"
+    assert isinstance(d["suggested_projects"],list),  f"'suggested_projects': verwacht list"
     assert d["project"] is None, f"'project': verwacht null, kreeg {d['project']!r}"
 
 

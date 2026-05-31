@@ -281,3 +281,101 @@ def test_window_activity_linked_to_unique_activity():
     a.refresh_from_db()
     assert a.unique_activity is not None
     assert a.unique_activity.block is not None
+
+
+# ── Optie C: handmatige toewijzingen overleven herberekening ──────────────────
+
+@pytest.mark.django_db
+def test_reaggregate_restores_manual_assignment():
+    """Handmatig toegewezen blokken krijgen na herberekening hun project terug."""
+    from apps.projects.models import Project
+    from apps.activities.models import BlockProjectHistory
+
+    project = Project.objects.create(name="Alpha", color="#aabbcc")
+    make_activity("VS Code", 9, 0, duration_seconds=60, save=True)
+
+    aggregate_day(TARGET_DATE)
+
+    block = ActivityBlock.objects.get(date=TARGET_DATE)
+    block.project = project
+    block.save()
+    BlockProjectHistory.objects.create(block=block, project=project, assigned_by="manual")
+
+    # Herberekening
+    aggregate_day(TARGET_DATE)
+
+    new_block = ActivityBlock.objects.get(date=TARGET_DATE, started_at=slot_start(9, 0))
+    assert new_block.project == project
+
+
+@pytest.mark.django_db
+def test_reaggregate_creates_history_for_restored_assignment():
+    """Na herberekening staat de herstelde handmatige toewijzing in BlockProjectHistory."""
+    from apps.projects.models import Project
+    from apps.activities.models import BlockProjectHistory
+
+    project = Project.objects.create(name="Alpha", color="#aabbcc")
+    make_activity("VS Code", 9, 0, duration_seconds=60, save=True)
+
+    aggregate_day(TARGET_DATE)
+
+    block = ActivityBlock.objects.get(date=TARGET_DATE)
+    block.project = project
+    block.save()
+    BlockProjectHistory.objects.create(block=block, project=project, assigned_by="manual")
+
+    aggregate_day(TARGET_DATE)
+
+    new_block = ActivityBlock.objects.get(date=TARGET_DATE, started_at=slot_start(9, 0))
+    assert BlockProjectHistory.objects.filter(
+        block=new_block, project=project, assigned_by="manual"
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_reaggregate_does_not_restore_rule_assignment():
+    """Toewijzingen via regels worden NIET hersteld — die lopen via de rule engine."""
+    from apps.projects.models import Project
+    from apps.activities.models import BlockProjectHistory
+
+    project = Project.objects.create(name="Alpha", color="#aabbcc")
+    make_activity("VS Code", 9, 0, duration_seconds=60, save=True)
+
+    aggregate_day(TARGET_DATE)
+
+    block = ActivityBlock.objects.get(date=TARGET_DATE)
+    block.project = project
+    block.save()
+    BlockProjectHistory.objects.create(block=block, project=project, assigned_by="rule")
+
+    aggregate_day(TARGET_DATE)
+
+    new_block = ActivityBlock.objects.get(date=TARGET_DATE, started_at=slot_start(9, 0))
+    # Rule-toewijzingen worden opnieuw bepaald door de rule engine, niet hersteld uit de snapshot
+    assert BlockProjectHistory.objects.filter(
+        block=new_block, assigned_by="manual"
+    ).count() == 0
+
+
+@pytest.mark.django_db
+def test_reaggregate_ignores_slot_without_new_block():
+    """Als een slot na herberekening leeg is, wordt de snapshot stilzwijgend genegeerd."""
+    from apps.projects.models import Project
+    from apps.activities.models import BlockProjectHistory
+
+    project = Project.objects.create(name="Alpha", color="#aabbcc")
+    activity = make_activity("VS Code", 9, 0, duration_seconds=60, save=True)
+
+    aggregate_day(TARGET_DATE)
+
+    block = ActivityBlock.objects.get(date=TARGET_DATE)
+    block.project = project
+    block.save()
+    BlockProjectHistory.objects.create(block=block, project=project, assigned_by="manual")
+
+    # Verwijder de activiteit zodat het slot leeg is na herberekening
+    activity.delete()
+
+    # Mag geen fout gooien
+    aggregate_day(TARGET_DATE)
+    assert ActivityBlock.objects.filter(date=TARGET_DATE).count() == 0

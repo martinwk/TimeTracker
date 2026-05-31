@@ -43,7 +43,16 @@ def aggregate_day(target_date: date, block_minutes: int = DEFAULT_BLOCK_MINUTES)
 
     Bij heraggregatie worden bestaande blokken eerst verwijderd.
     """
-    from apps.activities.models import ActivityBlock, UniqueActivity, WindowActivity
+    from apps.activities.models import ActivityBlock, UniqueActivity, WindowActivity, BlockProjectHistory
+
+    # Snapshot handmatige toewijzingen vóór verwijdering (Optie C).
+    # Sleutel: started_at (altijd exact hetzelfde 15-min raster).
+    manual_snapshot = {
+        entry["block__started_at"]: entry["project_id"]
+        for entry in BlockProjectHistory.objects
+            .filter(block__date=target_date, assigned_by="manual")
+            .values("block__started_at", "project_id")
+    }
 
     # Reset FK zodat SET_NULL geen wezen achterlaat na cascade-delete
     WindowActivity.objects.filter(date=target_date).update(unique_activity=None)
@@ -132,6 +141,30 @@ def aggregate_day(target_date: date, block_minutes: int = DEFAULT_BLOCK_MINUTES)
         "%s: %d blokken aangemaakt uit %d activiteiten (venster: %d min)",
         target_date, blocks_created, len(activities_processed), block_minutes,
     )
+
+    # Herstel handmatige toewijzingen (Optie C).
+    # Loopt vóór de rule engine zodat herstelde blokken worden overgeslagen.
+    if manual_snapshot:
+        from apps.projects.models import Project
+        project_cache = {
+            p.pk: p for p in Project.objects.filter(pk__in=set(manual_snapshot.values()))
+        }
+        blocks_to_update = []
+        history_records  = []
+        for block in ActivityBlock.objects.filter(
+            date=target_date, started_at__in=manual_snapshot.keys()
+        ):
+            project = project_cache.get(manual_snapshot[block.started_at])
+            if project:
+                block.project = project
+                blocks_to_update.append(block)
+                history_records.append(
+                    BlockProjectHistory(block=block, project=project, assigned_by="manual")
+                )
+        if blocks_to_update:
+            ActivityBlock.objects.bulk_update(blocks_to_update, ["project"])
+        if history_records:
+            BlockProjectHistory.objects.bulk_create(history_records)
 
     logger.info("%s: Activityrules toepassen...", target_date)
     from apps.activities.rule_engine import apply_rules

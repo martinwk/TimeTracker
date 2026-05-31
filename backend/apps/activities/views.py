@@ -212,8 +212,19 @@ class ActivityBlockViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_404_NOT_FOUND,
                 )
 
-        assigned = ActivityBlock.objects.filter(id__in=block_ids).update(project=project)
-        return Response({"assigned": assigned}, status=status.HTTP_200_OK)
+        blocks = list(ActivityBlock.objects.filter(id__in=block_ids))
+        for block in blocks:
+            block.project = project
+        ActivityBlock.objects.bulk_update(blocks, ["project"])
+
+        if project is not None:
+            from .models import BlockProjectHistory
+            BlockProjectHistory.objects.bulk_create([
+                BlockProjectHistory(block=b, project=project, assigned_by="manual")
+                for b in blocks
+            ])
+
+        return Response({"assigned": len(blocks)}, status=status.HTTP_200_OK)
 
 
 class UniqueActivityViewSet(viewsets.ModelViewSet):

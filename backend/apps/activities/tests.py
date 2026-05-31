@@ -578,6 +578,37 @@ def test_bulk_assign_requires_block_ids(api_client, project_alpha):
     assert response.status_code == 400
 
 
+# ── API: ActivityBlock — assign maakt BlockProjectHistory aan ────────────────
+
+@pytest.mark.django_db
+def test_bulk_assign_creates_history_record(api_client, two_unassigned_blocks, project_alpha):
+    """POST assign/ met project maakt een BlockProjectHistory-record aan per blok."""
+    from apps.activities.models import BlockProjectHistory
+    ids = [b.id for b in two_unassigned_blocks]
+    api_client.post(
+        "/api/activities/activity-blocks/assign/",
+        {"block_ids": ids, "project_id": project_alpha.id},
+        format="json",
+    )
+    assert BlockProjectHistory.objects.filter(
+        block__in=two_unassigned_blocks,
+        project=project_alpha,
+        assigned_by="manual",
+    ).count() == 2
+
+
+@pytest.mark.django_db
+def test_bulk_assign_null_does_not_create_history(api_client, activity_block_with_project):
+    """POST assign/ met project_id=null maakt géén history aan (er is geen project om te loggen)."""
+    from apps.activities.models import BlockProjectHistory
+    api_client.post(
+        "/api/activities/activity-blocks/assign/",
+        {"block_ids": [activity_block_with_project.id], "project_id": None},
+        format="json",
+    )
+    assert BlockProjectHistory.objects.filter(block=activity_block_with_project).count() == 0
+
+
 # ── API: ActivityBlock — datumbereikfilter (stap 2) ──────────────────────────
 
 @pytest.fixture

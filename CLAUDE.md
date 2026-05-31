@@ -102,7 +102,7 @@ Backend is complete (models, importer, aggregator, rule engine, DRF API). Fronte
 
 **Serializer:** `project` is a nested read-only object `{ id, name, color }`; write via `project_id` (write-only FK field).
 
-**Test coverage:** 138 backend tests (pytest), 206 frontend tests (Vitest).
+**Test coverage:** 150 backend tests (pytest), 206 frontend tests (Vitest).
 
 **Bulk endpoint — ID-onderscheid:** Temp-IDs (aangemaakt in de frontend met `Date.now() * 1000 + m`) zijn > 1e12. Echte backend-IDs zijn < 1e12. De frontend stuurt alleen echte IDs mee in `deleted_ids`.
 
@@ -111,7 +111,7 @@ Key TODO:
 - Stats view (Weekstaat en Projects zijn klaar)
 - **Weekstaat: round to quarter-hours.** `total_seconds` on aggregator blocks represents overlap time, not wall-clock duration. The Weekstaat matrix should round each cell to the nearest quarter-hour before summing, so 3600 s → 1 u and 5400 s → 1,5 u are consistent with what the user sees on the grid.
 - **Investigate: hours total mismatch.** A block that visually spans 1.5 h showed as 16 separate quarter-blocks in the Dashboard and reported 4 h in Weekstaat. Likely caused by stale/duplicate blocks from earlier frontend versions that sent temp-IDs to the assign endpoint (now fixed). Worth adding a management command that compares the sum of `total_seconds` within a contiguous assigned group against the group's wall-clock span, and flags groups where they diverge significantly.
-- **Fix: assign-endpoint moet BlockProjectHistory aanmaken.** `POST /api/activity-blocks/assign/` doet alleen een bulk-update op `project`. Er wordt geen `BlockProjectHistory`-record aangemaakt met `assigned_by='manual'`. Fix: voor elk toegewezen block een history-record aanmaken in de assign-view. Dit is een vereiste vóór Optie C kan worden geïmplementeerd.
+- ~~**Fix: assign-endpoint moet BlockProjectHistory aanmaken.**~~ Geïmplementeerd: `POST /api/activity-blocks/assign/` maakt nu een `BlockProjectHistory`-record aan met `assigned_by='manual'` voor elk toegewezen blok (niet bij ontkoppelen).
 - **Implement Optie C: handmatige toewijzingen overleven herberekening.** In `aggregate_day()`: vóór het verwijderen snapshot `{started_at → project_id}` voor blokken met een `BlockProjectHistory`-record met `assigned_by='manual'`. Na herberekening: herstel die toewijzingen op nieuwe blokken met dezelfde `started_at` (slots zijn altijd exact hetzelfde 15-min raster). Vereist eerst de fix van het assign-endpoint.
 - **Nieuw endpoint `POST /api/activities/sync/`.** Importeert AHK-logbestand (auto-detect: `{AHK_LOG_DIR}/window_log_{YYYY-MM}.txt`; `AHK_LOG_DIR` is een Django-instelling). Aggregeert alle dagen die wél `WindowActivity`-records hebben maar géén `ActivityBlock`-records. Optie C van toepassing zodra geïmplementeerd. Response: `{ log_file, imported, days_aggregated, blocks_created }`.
 - **Frontend: sync-knop (cirkelende pijlen).** Direct zichtbaar in de header/navigatie — geen verborgen menu. Roept `POST /api/activities/sync/` aan en toont kort de resultaten (X nieuwe blokken, Y dagen). Als het logbestand niet gevonden wordt: fallback-melding + knop naar cogwheel-instellingen.

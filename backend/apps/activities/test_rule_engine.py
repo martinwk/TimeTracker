@@ -14,7 +14,7 @@ from datetime import date, datetime, timezone
 
 import pytest
 
-from apps.activities.models import ActivityBlock, UniqueActivity, WindowActivity, ActivityRule
+from apps.activities.models import ActivityBlock, BlockProjectHistory, UniqueActivity, WindowActivity, ActivityRule
 from apps.activities.rule_engine import apply_rules
 from apps.projects.models import Project
 
@@ -170,12 +170,8 @@ def test_no_rule_match_no_assignment(unique_activity_zotero, window_activity_for
 # ── Test: Block met bestaand project wordt niet overschreven ───────────────
 
 @pytest.mark.django_db
-def test_block_with_project_not_overwritten(
-    zotero_rule,
-    project_admin,
-):
-    """Block met bestaand project wordt niet verwerkt."""
-    # Maak block met al ingesteld project
+def test_block_with_project_not_overwritten(zotero_rule, project_admin):
+    """Block met handmatige toewijzing wordt niet overschreven door regel."""
     block = ActivityBlock.objects.create(
         app_name="Zotero",
         date=date(2026, 3, 13),
@@ -184,25 +180,26 @@ def test_block_with_project_not_overwritten(
         total_seconds=3600,
         activity_count=1,
         block_minutes=15,
-        project=project_admin,  # Al ingesteld
+        project=project_admin,
     )
+    BlockProjectHistory.objects.create(block=block, project=project_admin, assigned_by="manual")
     ua = UniqueActivity.objects.create(
         block=block,
         raw_title="Koersnotatie - Zotero",
         total_seconds=3600,
     )
-    start = datetime(2026, 3, 13, 9, 0, tzinfo=timezone.utc)
-    end = datetime(2026, 3, 13, 10, 0, tzinfo=timezone.utc)
-    wa = WindowActivity.from_log_line(start, end, "Koersnotatie - Zotero")
+    wa = WindowActivity.from_log_line(
+        datetime(2026, 3, 13, 9, 0, tzinfo=timezone.utc),
+        datetime(2026, 3, 13, 10, 0, tzinfo=timezone.utc),
+        "Koersnotatie - Zotero",
+    )
     wa.date = date(2026, 3, 13)
     wa.unique_activity = ua
     wa.save()
 
-    # Voer rules uit
     result = apply_rules()
 
-    # Block moet onveranderd blijven (project_admin)
-    assert result.blocks_assigned == 0  # Niet verwerkt want project != None
+    assert result.blocks_assigned == 0
     block.refresh_from_db()
     assert block.project == project_admin
 
@@ -500,8 +497,6 @@ def test_dominant_activity_rule(project_research, project_admin):
 @pytest.mark.django_db
 def test_history_tracked_on_assignment(project_research, activity_block, unique_activity_zotero, window_activity_for_zotero):
     """Assignment via rule creates BlockProjectHistory entry."""
-    from apps.activities.models import BlockProjectHistory
-
     rule = ActivityRule.objects.create(
         project=project_research,
         match_field="app_name",
@@ -512,11 +507,126 @@ def test_history_tracked_on_assignment(project_research, activity_block, unique_
 
     apply_rules()
 
-    # Check history was recorded
     history = BlockProjectHistory.objects.filter(block=activity_block)
-    assert history.exists()
     assert history.count() == 1
+    assert history.first().project == project_research
+    assert history.first().assigned_by == "rule"
 
-    hist_entry = history.first()
-    assert hist_entry.project == project_research
-    assert hist_entry.assigned_by == "rule"
+
+# ── Test: Handmatige toewijzingen beschermd, rule-toewijzingen herevalueerbaar ──
+
+@pytest.mark.django_db
+def test_manual_assignment_not_overwritten_by_rule(zotero_rule, project_admin):
+    """Block handmatig toegewezen aan project_admin → niet overschreven door Zotero-regel."""
+    block = ActivityBlock.objects.create(
+        app_name="Zotero",
+        date=date(2026, 3, 13),
+        started_at=datetime(2026, 3, 13, 11, 0, tzinfo=timezone.utc),
+        ended_at=datetime(2026, 3, 13, 12, 0, tzinfo=timezone.utc),
+        total_seconds=3600,
+        activity_count=1,
+        block_minutes=15,
+        project=project_admin,
+    )
+    BlockProjectHistory.objects.create(block=block, project=project_admin, assigned_by="manual")
+    ua = UniqueActivity.objects.create(block=block, raw_title="Koersnotatie - Zotero", total_seconds=3600)
+    wa = WindowActivity.from_log_line(
+        datetime(2026, 3, 13, 11, 0, tzinfo=timezone.utc),
+        datetime(2026, 3, 13, 12, 0, tzinfo=timezone.utc),
+        "Koersnotatie - Zotero",
+    )
+    wa.date = date(2026, 3, 13)
+    wa.unique_activity = ua
+    wa.save()
+
+    result = apply_rules()
+
+    assert result.blocks_assigned == 0
+    block.refresh_from_db()
+    assert block.project == project_admin
+
+
+@pytest.mark.django_db
+def test_rule_assigned_block_reevaluated_on_rerun(project_research, project_admin):
+    """Block via regel toegewezen aan project_research → na regelwijziging opnieuw geëvalueerd naar project_admin."""
+    rule = ActivityRule.objects.create(
+        project=project_research,
+        match_field="app_name",
+        match_value="Zotero",
+        priority=10,
+        is_active=True,
+    )
+    block = ActivityBlock.objects.create(
+        app_name="Zotero",
+        date=date(2026, 3, 13),
+        started_at=datetime(2026, 3, 13, 11, 0, tzinfo=timezone.utc),
+        ended_at=datetime(2026, 3, 13, 12, 0, tzinfo=timezone.utc),
+        total_seconds=3600,
+        activity_count=1,
+        block_minutes=15,
+        project=None,
+    )
+    ua = UniqueActivity.objects.create(block=block, raw_title="Koersnotatie - Zotero", total_seconds=3600)
+    wa = WindowActivity.from_log_line(
+        datetime(2026, 3, 13, 11, 0, tzinfo=timezone.utc),
+        datetime(2026, 3, 13, 12, 0, tzinfo=timezone.utc),
+        "Koersnotatie - Zotero",
+    )
+    wa.date = date(2026, 3, 13)
+    wa.unique_activity = ua
+    wa.save()
+
+    result1 = apply_rules()
+    assert result1.blocks_assigned == 1
+    block.refresh_from_db()
+    assert block.project == project_research
+
+    # Regelwijziging: Zotero → project_admin
+    rule.project = project_admin
+    rule.save()
+
+    result2 = apply_rules()
+    assert result2.blocks_assigned == 1
+    block.refresh_from_db()
+    assert block.project == project_admin
+
+
+@pytest.mark.django_db
+def test_blocks_skipped_manual_counted(zotero_rule, project_admin):
+    """blocks_skipped_manual telt handmatig toegewezen blokken correct."""
+    manual_block = ActivityBlock.objects.create(
+        app_name="Zotero",
+        date=date(2026, 3, 13),
+        started_at=datetime(2026, 3, 13, 9, 0, tzinfo=timezone.utc),
+        ended_at=datetime(2026, 3, 13, 10, 0, tzinfo=timezone.utc),
+        total_seconds=3600,
+        activity_count=1,
+        block_minutes=15,
+        project=project_admin,
+    )
+    BlockProjectHistory.objects.create(block=manual_block, project=project_admin, assigned_by="manual")
+
+    unassigned_block = ActivityBlock.objects.create(
+        app_name="Zotero",
+        date=date(2026, 3, 13),
+        started_at=datetime(2026, 3, 13, 10, 0, tzinfo=timezone.utc),
+        ended_at=datetime(2026, 3, 13, 11, 0, tzinfo=timezone.utc),
+        total_seconds=3600,
+        activity_count=1,
+        block_minutes=15,
+        project=None,
+    )
+    ua = UniqueActivity.objects.create(block=unassigned_block, raw_title="Koersnotatie - Zotero", total_seconds=3600)
+    wa = WindowActivity.from_log_line(
+        datetime(2026, 3, 13, 10, 0, tzinfo=timezone.utc),
+        datetime(2026, 3, 13, 11, 0, tzinfo=timezone.utc),
+        "Koersnotatie - Zotero",
+    )
+    wa.date = date(2026, 3, 13)
+    wa.unique_activity = ua
+    wa.save()
+
+    result = apply_rules()
+
+    assert result.blocks_skipped_manual == 1
+    assert result.blocks_assigned == 1

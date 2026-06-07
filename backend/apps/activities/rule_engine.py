@@ -3,10 +3,12 @@ Rule engine voor het automatisch koppelen van ActivityBlocks aan projecten.
 
 Algoritme:
   1. Haal alle actieve ActivityRules op, gesorteerd op prioriteit (laag = belangrijk)
-  2. Voor elke ActivityBlock zonder project: loop through regels totdat één matcht
-  3. Bij eerste match: stel block.project in met het project van de regel
-  4. Handmatig ingestelde projecten worden nooit overschreven
-  5. Return statistieken: aangemaakt, skipped, al handmatig
+  2. Blokken met een handmatige toewijzing (BlockProjectHistory.assigned_by='manual')
+     worden overgeslagen — handmatige keuzes worden nooit overschreven.
+  3. Blokken met een rule-toewijzing worden wél opnieuw geëvalueerd zodat
+     regelwijzigingen doorwerken.
+  4. Per block: loop through regels totdat één matcht; wijs toe als het project verandert.
+  5. Return statistieken: aangemaakt, skipped, verwerkt.
 """
 
 import logging
@@ -14,7 +16,9 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Optional
 
-from apps.activities.models import ActivityRule, ActivityBlock, UniqueActivity
+from django.db.models import Exists, OuterRef
+
+from apps.activities.models import ActivityRule, ActivityBlock, BlockProjectHistory
 
 logger = logging.getLogger(__name__)
 
@@ -32,22 +36,11 @@ def apply_rules(
     date_to: Optional[date] = None,
 ) -> ApplyRulesResult:
     """
-    Voer alle actieve ActivityRules toe op ActivityBlocks zonder project.
+    Voer alle actieve ActivityRules toe op ActivityBlocks.
 
-    Args:
-        date_from: Startdatum (inclusief). Geen filter als None.
-        date_to: Einddatum (inclusief). Geen filter als None.
-
-    Returns:
-        ApplyRulesResult met tellingen
-
-    Gedrag:
-      - Alleen blocks zonder project worden verwerkt (project is None)
-      - Bij elke block: eerste matchende regel (op prioriteit) wordt gebruikt
-      - Block.project wordt ingesteld op het project van de regel
-      - Idempotent: meerdere keer draaien geeft dezelfde resultaat
+    Blokken met een handmatige toewijzing worden beschermd en overgeslagen.
+    Blokken met een rule-toewijzing worden opnieuw geëvalueerd.
     """
-    # Haal active rules op, sorteren op prioriteit (laag eerst)
     rules = ActivityRule.objects.filter(is_active=True).order_by("priority")
 
     if not rules.exists():
@@ -58,93 +51,71 @@ def apply_rules(
             blocks_processed=0,
         )
 
-    # Filter ActivityBlocks: alleen degenen zonder project
-    blocks = ActivityBlock.objects.filter(project__isnull=True)
-    if date_from or date_to:
-        if date_from:
-            blocks = blocks.filter(date__gte=date_from)
-        if date_to:
-            blocks = blocks.filter(date__lte=date_to)
+    # Subquery: heeft dit blok een handmatige toewijzing in de history?
+    has_manual_assignment = BlockProjectHistory.objects.filter(
+        block=OuterRef("pk"),
+        assigned_by="manual",
+    )
 
-    blocks = blocks.order_by("date", "started_at")
+    date_qs = ActivityBlock.objects.all()
+    if date_from:
+        date_qs = date_qs.filter(date__gte=date_from)
+    if date_to:
+        date_qs = date_qs.filter(date__lte=date_to)
+
+    blocks_skipped_manual = date_qs.filter(Exists(has_manual_assignment)).count()
+    blocks = date_qs.exclude(Exists(has_manual_assignment)).order_by("date", "started_at")
 
     blocks_assigned = 0
-    blocks_skipped_manual = 0
     blocks_processed = 0
 
     for block in blocks:
         blocks_processed += 1
+        matched_project = None
 
-        # Loop through regels op prioriteit
-        matched_rule = None
         for rule in rules:
-            # Handle special rule types that use block history
             if rule.match_field == "dominant_activity":
-                # Check if dominant activity title matches and has project history
                 dominant = block.dominant_title
                 if dominant and rule.match_value.lower() == dominant.lower():
-                    project = block.get_project_for_dominant_activity()
-                    if project:
-                        block.project = project
-                        block.save(update_fields=["project"])
-                        from apps.activities.models import BlockProjectHistory
-                        BlockProjectHistory.objects.create(
-                            block=block,
-                            project=project,
-                            assigned_by="rule",
-                        )
-                        blocks_assigned += 1
-                        matched_rule = rule
+                    p = block.get_project_for_dominant_activity()
+                    if p:
+                        matched_project = p
                         break
 
             elif rule.match_field == "recent_project":
-                # Check if recent project exists for this app
-                val = rule.match_value.lower()
-                if block.app_name.lower() == val:
-                    project = block.get_recent_project_for_app()
-                    if project:
-                        block.project = project
-                        block.save(update_fields=["project"])
-                        from apps.activities.models import BlockProjectHistory
-                        BlockProjectHistory.objects.create(
-                            block=block,
-                            project=project,
-                            assigned_by="rule",
-                        )
-                        blocks_assigned += 1
-                        matched_rule = rule
+                if block.app_name.lower() == rule.match_value.lower():
+                    p = block.get_recent_project_for_app()
+                    if p:
+                        matched_project = p
                         break
 
             else:
-                # Standard rules: app_name, title_contains, etc.
-                window_activity = block.unique_activities.first().occurrences.first()
+                ua = block.unique_activities.first()
+                window_activity = ua.occurrences.first() if ua else None
                 if window_activity and rule.apply(window_activity):
-                    matched_rule = rule
-                    block.project = rule.project
-                    block.save(update_fields=["project"])
-
-                    from apps.activities.models import BlockProjectHistory
-                    BlockProjectHistory.objects.create(
-                        block=block,
-                        project=rule.project,
-                        assigned_by="rule",
-                    )
-                    blocks_assigned += 1
+                    matched_project = rule.project
                     break
 
-        if matched_rule:
+        if matched_project and block.project != matched_project:
+            block.project = matched_project
+            block.save(update_fields=["project"])
+            BlockProjectHistory.objects.create(
+                block=block,
+                project=matched_project,
+                assigned_by="rule",
+            )
+            blocks_assigned += 1
             logger.debug(
-                "apply_rules: Block %d (%s) → %s (regel #%d, type: %s)",
+                "apply_rules: Block %d (%s) → %s",
                 block.id,
                 block.dominant_title[:40] if block.dominant_title else "N/A",
-                matched_rule.project.name,
-                matched_rule.id,
-                matched_rule.match_field,
+                matched_project.name,
             )
 
     logger.info(
-        "apply_rules: %d blocks toegewezen, %d activiteiten verwerkt",
+        "apply_rules: %d blokken toegewezen, %d handmatig overgeslagen, %d verwerkt",
         blocks_assigned,
+        blocks_skipped_manual,
         blocks_processed,
     )
 

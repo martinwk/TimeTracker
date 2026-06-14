@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter
 
-from apps.activities.importer import import_parsed_lines, parse_stream
+from apps.activities.importer import import_parsed_lines, parse_file, parse_stream
 from apps.activities.rule_engine import apply_rules
 from .models import WindowActivity, ActivityBlock, UniqueActivity, ActivityRule
 from .serializers import (
@@ -68,6 +68,71 @@ class ImportAhkLogView(APIView):
             {"results": results, "total_imported": total_imported},
             status=status.HTTP_200_OK,
         )
+
+
+class SyncView(APIView):
+    """
+    POST /api/activities/sync/
+
+    Importeert het AHK-logbestand en aggregeert alle dagen die in het
+    logbestand voorkomen. Dagen met bestaande blokken worden opnieuw
+    geaggregeerd zodat nieuwe log-entries worden meegenomen; Optie C
+    beschermt handmatige toewijzingen.
+
+    Request body (optioneel):
+    { "log_path": "/pad/naar/logbestand.txt" }
+
+    Response:
+    {
+        "log_file": "/pad/...",
+        "imported": 42,
+        "days_aggregated": ["2026-11-01", "2026-11-02"],
+        "blocks_created": 15
+    }
+    """
+
+    def post(self, request):
+        from datetime import date
+        from pathlib import Path
+        from django.conf import settings as django_settings
+        from apps.activities.aggregator import aggregate_day
+
+        data = request.data or {}
+        log_path_override = data.get("log_path")
+
+        if log_path_override:
+            log_path = Path(log_path_override)
+        else:
+            today = date.today()
+            log_path = Path(django_settings.AHK_LOG_DIR) / f"window_log_{today.strftime('%Y-%m')}.txt"
+
+        if not log_path.exists():
+            return Response(
+                {"error": f"Logbestand niet gevonden: {log_path}"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Lees het bestand eenmalig; haal unieke datums en importeer tegelijk
+        parsed_lines = list(parse_file(log_path))
+        log_dates = sorted({line.started_at.date() for line in parsed_lines})
+        import_result = import_parsed_lines(iter(parsed_lines))
+
+        # Aggregeer alle datums uit het logbestand (re-aggregeert ook al-geaggregeerde
+        # dagen zodat nieuwe entries worden meegenomen; Optie C beschermt handmatige toewijzingen)
+        blocks_created = 0
+        days_aggregated = []
+        for day in log_dates:
+            if WindowActivity.objects.filter(date=day).exists():
+                result = aggregate_day(day)
+                blocks_created += result.blocks_created
+                days_aggregated.append(str(day))
+
+        return Response({
+            "log_file": str(log_path),
+            "imported": import_result.imported,
+            "days_aggregated": days_aggregated,
+            "blocks_created": blocks_created,
+        }, status=status.HTTP_200_OK)
 
 
 class ApplyRulesView(APIView):

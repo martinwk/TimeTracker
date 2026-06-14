@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from .views import (
     ImportAhkLogView,
     ApplyRulesView,
+    SyncView,
     WindowActivityViewSet,
     ActivityBlockViewSet,
     UniqueActivityViewSet,
@@ -33,4 +34,5 @@ urlpatterns = [
     path("", include(router.urls)),
     path("import/", ImportAhkLogView.as_view(), name="import-ahk-log"),
     path("apply-rules/", ApplyRulesView.as_view(), name="apply-rules"),
+    path("sync/", SyncView.as_view(), name="sync"),
 ]

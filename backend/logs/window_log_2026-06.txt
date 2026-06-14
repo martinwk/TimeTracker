@@ -1,0 +1,15 @@
+2026-06-14 09:00:00 - 2026-06-14 09:00:30 | 000 min | track_window_log.ahk - AutoHotkey - Visual Studio Code
+2026-06-14 09:00:30 - 2026-06-14 09:01:00 | 000 min | Program Manager
+2026-06-14 09:01:00 - 2026-06-14 09:15:00 | 014 min | TimeTracker - Visual Studio Code
+2026-06-14 09:15:00 - 2026-06-14 09:28:00 | 013 min | TimeTracker - Visual Studio Code
+2026-06-14 09:28:00 - 2026-06-14 09:28:30 | 000 min | Idle
+2026-06-14 09:28:30 - 2026-06-14 09:30:00 | 001 min | TimeTracker - Visual Studio Code
+2026-06-14 10:00:00 - 2026-06-14 10:14:00 | 014 min | Koers zetten richting digitale autonomie - Lockefeer - Zotero
+2026-06-14 10:14:00 - 2026-06-14 10:15:00 | 001 min | Program Manager
+2026-06-14 10:15:00 - 2026-06-14 10:29:00 | 014 min | Koers zetten richting digitale autonomie - Lockefeer - Zotero
+2026-06-14 10:29:00 - 2026-06-14 10:30:00 | 001 min | Idle
+2026-06-14 11:00:00 - 2026-06-14 11:14:30 | 014 min | Inbox — Mozilla Firefox
+2026-06-14 11:14:30 - 2026-06-14 11:15:00 | 000 min | Program Manager
+2026-06-14 11:15:00 - 2026-06-14 11:29:00 | 014 min | Inbox — Mozilla Firefox
+2026-06-14 11:29:00 - 2026-06-14 11:30:00 | 001 min | Task Switching
+2026-06-14 12:29:00 - 2026-06-14 12:34:00 | 005 min | Inbox — Mozilla Firefox

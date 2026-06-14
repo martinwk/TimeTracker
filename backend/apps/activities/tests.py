@@ -1088,3 +1088,85 @@ def test_bulk_response_envelope_has_exact_keys(api_client):
     )
     assert response.status_code == 200
     assert set(response.data.keys()) == {"created", "updated", "deleted", "blocks"}
+
+# ── POST /api/activities/sync/ ────────────────────────────────────────────────
+
+LOG_LINE = "2026-03-13 09:00:00 - 2026-03-13 09:00:30 | 000 min | VS Code\n"
+
+
+@pytest.mark.django_db
+def test_sync_log_file_not_found_returns_404(api_client, tmp_path, settings):
+    """Sync geeft 404 als het logbestand niet bestaat."""
+    settings.AHK_LOG_DIR = tmp_path
+    # Geen bestand aangemaakt
+
+    response = api_client.post("/api/activities/sync/", {}, format="json")
+
+    assert response.status_code == 404
+    assert "error" in response.data
+
+
+@pytest.mark.django_db
+def test_sync_imports_log_and_aggregates_days(api_client, tmp_path, settings):
+    """Sync importeert logbestand en aggregeert dagen zonder ActivityBlocks."""
+    settings.AHK_LOG_DIR = tmp_path
+    log_file = tmp_path / "window_log_2026-03.txt"
+    log_file.write_text(LOG_LINE, encoding="utf-8")
+
+    response = api_client.post(
+        "/api/activities/sync/",
+        {"log_path": str(log_file)},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    assert response.data["imported"] == 1
+    assert "2026-03-13" in response.data["days_aggregated"]
+    assert response.data["blocks_created"] >= 1
+
+
+@pytest.mark.django_db
+def test_sync_reaggregates_day_with_new_entries(api_client, tmp_path, settings):
+    """Sync re-aggregeert een dag die al blokken heeft als er nieuwe log-entries voor zijn."""
+    from datetime import date
+    from apps.activities.models import ActivityBlock
+
+    settings.AHK_LOG_DIR = tmp_path
+    log_file = tmp_path / "window_log_2026-03.txt"
+    log_file.write_text(LOG_LINE, encoding="utf-8")
+
+    # Eerste sync: dag 2026-03-13 aggregeren
+    api_client.post("/api/activities/sync/", {"log_path": str(log_file)}, format="json")
+    assert ActivityBlock.objects.filter(date=date(2026, 3, 13)).exists()
+
+    # Nieuwe entry toevoegen aan het logbestand
+    extra = "2026-03-13 10:00:00 - 2026-03-13 10:00:30 | 000 min | Zotero\n"
+    log_file.write_text(LOG_LINE + extra, encoding="utf-8")
+
+    # Tweede sync: dag heeft nieuwe entries → wél opnieuw aggregeren
+    response = api_client.post(
+        "/api/activities/sync/",
+        {"log_path": str(log_file)},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    assert "2026-03-13" in response.data["days_aggregated"]
+    assert response.data["blocks_created"] >= 1
+
+
+@pytest.mark.django_db
+def test_sync_response_has_expected_fields(api_client, tmp_path, settings):
+    """Sync-response bevat precies {log_file, imported, days_aggregated, blocks_created}."""
+    settings.AHK_LOG_DIR = tmp_path
+    log_file = tmp_path / "window_log_2026-03.txt"
+    log_file.write_text(LOG_LINE, encoding="utf-8")
+
+    response = api_client.post(
+        "/api/activities/sync/",
+        {"log_path": str(log_file)},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    assert set(response.data.keys()) == {"log_file", "imported", "days_aggregated", "blocks_created"}

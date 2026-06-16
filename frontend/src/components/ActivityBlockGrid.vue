@@ -107,6 +107,7 @@
             v-for="group in mergedBlocksByDay[day.iso] ?? []"
             :key="group.blocks[0].id"
             :blocks="group.blocks"
+            :data-group-key="group.blocks[0].id"
             :is-selected="group.blocks.every(b => selectedBlocks.includes(b.id))"
             :is-dragging="!!activeMove && activeMove.blockIds.some(id => group.blocks.find(b => b.id === id))"
             :hour-height="hourHeight"
@@ -545,10 +546,18 @@ const onColumnMouseMove = (e, iso) => {
     hoveredSlot.value = null
     return
   }
-  if (e.target.closest('.activity-block')) {
-    hoveredSlot.value = null
+
+  const actEl = e.target.closest('.activity-block')
+  if (actEl) {
+    const groupKey = parseInt(actEl.dataset.groupKey)
+    const group = (mergedBlocksByDay.value[iso] ?? []).find(g => g.blocks[0].id === groupKey)
+    const activities = group ? store.getTopActivitiesForIds(group.blocks.map(b => b.id)) : []
+    hoveredSlot.value = activities.length > 0
+      ? { activities, x: e.clientX, y: e.clientY }
+      : null
     return
   }
+
   const rect    = e.currentTarget.getBoundingClientRect()
   const rawMin  = Math.floor((e.clientY - rect.top) / hourHeight * 60)
   const slotMin = Math.floor(rawMin / 15) * 15

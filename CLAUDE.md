@@ -82,7 +82,9 @@ AHK window log (text file)
 
 **Rule engine beschermt handmatige toewijzingen (geïmplementeerd):** De rule engine gebruikt een `Exists`-subquery om blokken met een `assigned_by='manual'` history-entry uit te sluiten. Blokken met alleen `assigned_by='rule'` history worden wél opnieuw geëvalueerd, zodat regelwijzigingen doorwerken op eerder automatisch toegewezen blokken. Idempotent: als de regel hetzelfde project zou toewijzen, wordt geen nieuwe history-entry aangemaakt.
 
-**Sync-workflow (nog te implementeren):** De frontend biedt een sync-knop (cirkelende pijlen, direct zichtbaar in de navigatie) die: (1) het AHK-logbestand importeert (auto-detect op basis van Django-instelling `AHK_LOG_DIR` + huidige maand: `window_log_{YYYY-MM}.txt`); (2) bepaalt welke dagen wél `WindowActivity`-records hebben maar géén `ActivityBlock`-records; (3) die dagen aggregeert. Voor al-geaggregeerde dagen wordt Optie C gebruikt zodat handmatige toewijzingen overleven. Overige instellingen (logbestandpad, fallback filepicker, regels toepassen) zitten in een apart cogwheel-menu.
+**Sync-workflow (geïmplementeerd):** De frontend biedt een sync-knop (cirkelende pijlen linksonder in de sidebar) die `POST /api/activities/sync/` aanroept. De backend importeert het AHK-logbestand (auto-detect: `{AHK_LOG_DIR}/window_log_{YYYY-MM}.txt`) en herberekent alle dagen die in het logbestand voorkomen — ook al-geaggregeerde dagen, zodat nieuwe log-entries worden meegenomen. Optie C beschermt handmatige toewijzingen. Bij succes toont de knop kort de resultaten (X blokken, Y dagen); bij een ontbrekend logbestand verschijnt een foutmelding. Overige instellingen (logbestandpad, fallback filepicker, regels toepassen) zijn nog niet geïmplementeerd (cogwheel-menu).
+
+**Hover tooltip toont activiteiten voor zowel ongeassigneerde als toegewezen blokken:** `onColumnMouseMove` in `ActivityBlockGrid` detecteert via `e.target.closest('.activity-block')` of de cursor over een interactief blok beweegt. Zo ja: lees `data-group-key` (= eerste block-ID van de merged group), zoek de groep op in `mergedBlocksByDay`, en toon `getTopActivitiesForIds(group.blocks.map(b => b.id))` — de cumulatieve activiteitenlijst over alle blokken in de groep. Zo nee: toon `getTopActivities` voor het 15-min slot (alleen ongeassigneerde aggregator-blokken).
 
 ---
 
@@ -99,17 +101,17 @@ Backend is complete (models, importer, aggregator, rule engine, DRF API). Fronte
 - `POST /api/activity-blocks/bulk/` — bulk upsert + delete: `{ blocks: [{id?, started_at, total_seconds, project_id?}], deleted_ids?: [...] }` → `{ created, updated, deleted, blocks }`
 - `GET /api/projects/` — list projects
 - `POST /api/activities/apply-rules/` — run rules engine: `{ date_from, date_to }`
-- `POST /api/activities/sync/` — (nog te bouwen) import logbestand + aggregeer niet-geaggregeerde dagen: `{}` of `{ "log_path": "/override" }` → `{ log_file, imported, days_aggregated: [...], blocks_created }`
+- `POST /api/activities/sync/` — import logbestand + herbereken alle dagen in het logbestand: `{}` of `{ "log_path": "/override" }` → `{ log_file, imported, days_aggregated: [...], blocks_created }`
 
 **Serializer:** `project` is a nested read-only object `{ id, name, color }`; write via `project_id` (write-only FK field).
 
-**Test coverage:** 157 backend tests (pytest), 206 frontend tests (Vitest).
+**Test coverage:** 162 backend tests (pytest), 216 frontend tests (Vitest).
 
 **Bulk endpoint — ID-onderscheid:** Temp-IDs (aangemaakt in de frontend met `Date.now() * 1000 + m`) zijn > 1e12. Echte backend-IDs zijn < 1e12. De frontend stuurt alleen echte IDs mee in `deleted_ids`.
 
 Key TODO:
 
-- **BUG: Activiteitsduur onjuist bij blok dat kwartiergrens overschrijdt.** Een `WindowActivity` van bijv. 12:29–12:34 wordt gesplitst over twee 15-min-slots (12:15–12:30 en 12:30–12:45). Het eerste slot zou 1 min overlap moeten tonen, het tweede 4 min. In de frontend toont *beide* blokken echter 4 min. Vermoedelijke oorzaak: de aggregator berekent de overlap correct in `title_secs` en `UniqueActivity.total_seconds`, maar ergens in de frontend of de popup-weergave wordt de verkeerde waarde getoond — mogelijk de volle activiteitsduur in plaats van de per-slot-overlap. Reproduceerbaar met log-regel `2026-06-14 12:29:00 - 2026-06-14 12:34:00 | 005 min | Inbox — Mozilla Firefox`.
+- ~~**BUG: Activiteitsduur onjuist bij blok dat kwartiergrens overschrijdt.**~~ Opgelost in commit 652a1a6: `ActivityBlock.vue` gebruikt `visualDurationMin * 60` (gebaseerd op `ended_at`, altijd 15 min per aggregator-blok) in plaats van `totalSeconds` (per-slot overlap-seconden). Backend- en frontendtests toegevoegd die de correcte per-slot overlap bevestigen. Handmatig geverifieerd.
 - Stats view (Weekstaat en Projects zijn klaar)
 - **Weekstaat: round to quarter-hours.** `total_seconds` on aggregator blocks represents overlap time, not wall-clock duration. The Weekstaat matrix should round each cell to the nearest quarter-hour before summing, so 3600 s → 1 u and 5400 s → 1,5 u are consistent with what the user sees on the grid.
 - **Investigate: hours total mismatch.** A block that visually spans 1.5 h showed as 16 separate quarter-blocks in the Dashboard and reported 4 h in Weekstaat. Likely caused by stale/duplicate blocks from earlier frontend versions that sent temp-IDs to the assign endpoint (now fixed). Worth adding a management command that compares the sum of `total_seconds` within a contiguous assigned group against the group's wall-clock span, and flags groups where they diverge significantly.
@@ -117,8 +119,8 @@ Key TODO:
 - ~~**Implement Optie C: handmatige toewijzingen overleven herberekening.**~~ Geïmplementeerd in `aggregate_day()`.
 - **Frontend: beheerpagina voor auto-assign regels.** De backend-API voor `ActivityRule` bestaat al (`GET/POST/PATCH/DELETE /api/activities/activity-rules/`). Er is nog geen frontend-pagina om regels aan te maken, te bewerken en te verwijderen. Een regel heeft: `name`, `match_field` (app_name / dominant_activity / title_contains), `match_value`, `project`, en `priority` (lager = hogere prioriteit). De pagina moet ook een knop bevatten om de rule engine handmatig te draaien voor het huidige weekbereik.
 - ~~**Rule engine: handmatig toegewezen blokken niet overschrijven.**~~ Geïmplementeerd: `Exists`-subquery sluit blokken met `assigned_by='manual'` in history uit. Rule-toegewezen blokken worden wél opnieuw geëvalueerd. Handmatig geverifieerd in de frontend.
-- **Nieuw endpoint `POST /api/activities/sync/`.** Importeert AHK-logbestand (auto-detect: `{AHK_LOG_DIR}/window_log_{YYYY-MM}.txt`; `AHK_LOG_DIR` is een Django-instelling). Aggregeert alle dagen die wél `WindowActivity`-records hebben maar géén `ActivityBlock`-records. Optie C van toepassing zodra geïmplementeerd. Response: `{ log_file, imported, days_aggregated, blocks_created }`.
-- **Frontend: sync-knop (cirkelende pijlen).** Direct zichtbaar in de header/navigatie — geen verborgen menu. Roept `POST /api/activities/sync/` aan en toont kort de resultaten (X nieuwe blokken, Y dagen). Als het logbestand niet gevonden wordt: fallback-melding + knop naar cogwheel-instellingen.
+- ~~**Nieuw endpoint `POST /api/activities/sync/`.**~~ Geïmplementeerd. Importeert en herberekent alle dagen in het logbestand; Optie C beschermt handmatige toewijzingen.
+- ~~**Frontend: sync-knop (cirkelende pijlen).**~~ Geïmplementeerd: linksonder in de sidebar, toont resultaten na sync, foutmelding bij ontbrekend logbestand.
 - **Frontend: cogwheel-instellingenpaneel.** Bevat: (1) logbestandpad instellen (`AHK_LOG_DIR`); (2) fallback filepicker als auto-detect mislukt (upload via `POST /api/activities/import/`); (3) knop "Regels opnieuw toepassen" (`POST /api/activities/apply-rules/` voor huidig weekbereik).
 - **Verwacht gedrag: top-drie telt niet op tot 15 min.** Een blok beslaat altijd een vol 15-min slot op de grid, maar `total_seconds` en de `unique_activities` tonen alleen de werkelijk *actieve* (niet-ruis) tijd. Als het slot grotendeels idle was, kan de top drie 1+0+0 min tonen terwijl het blok visueel 15 min groot is — dat is correct. Eventuele verbetering: toon in de UI expliciet het onderscheid tussen wandkloktijd (blokduur) en actieve tijd (total_seconds).
 - **Dashboard: gedeclareerde uren per dag zichtbaar.** Toon per dag in de dashboard-weergave hoeveel uur er in totaal is gedeclareerd (d.w.z. de som van `total_seconds` van alle toegewezen blokken op die dag), zodat de gebruiker in één oogopslag de dagproductiviteit kan beoordelen.

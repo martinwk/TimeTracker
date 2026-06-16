@@ -275,6 +275,29 @@ def test_unique_activity_seconds_reflect_overlap():
 
 
 @pytest.mark.django_db
+def test_unique_activity_seconds_per_slot_when_crossing_boundary():
+    """
+    Activiteit 12:29–12:34 overschrijdt de 12:30-grens.
+    Slot 12:15–12:30: overlap = 1 min = 60 sec.
+    Slot 12:30–12:45: overlap = 4 min = 240 sec.
+    UniqueActivity.total_seconds moet per slot de OVERLAP bevatten,
+    niet de volle activiteitsduur.
+    """
+    make_activity("Inbox - Firefox", 12, 29, duration_seconds=5 * 60, save=True)
+
+    aggregate_day(TARGET_DATE)
+
+    block_1215 = ActivityBlock.objects.get(started_at=slot_start(12, 15))
+    block_1230 = ActivityBlock.objects.get(started_at=slot_start(12, 30))
+
+    ua_1215 = UniqueActivity.objects.get(block=block_1215)
+    ua_1230 = UniqueActivity.objects.get(block=block_1230)
+
+    assert ua_1215.total_seconds == 60,  f"slot 12:15 verwacht 60 sec, kreeg {ua_1215.total_seconds}"
+    assert ua_1230.total_seconds == 240, f"slot 12:30 verwacht 240 sec, kreeg {ua_1230.total_seconds}"
+
+
+@pytest.mark.django_db
 def test_window_activity_linked_to_unique_activity():
     a = make_activity("VS Code", 9, 0, duration_seconds=60, save=True)
 

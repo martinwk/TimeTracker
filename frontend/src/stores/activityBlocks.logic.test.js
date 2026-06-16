@@ -146,6 +146,21 @@ describe('activityBlocks store — getTopActivities', () => {
     const result = store.getTopActivities(ISO, 540, 570)
     expect(result).toHaveLength(2)
   })
+
+  it('toont per-slot overlap-seconden voor dezelfde titel die twee slots overspant', () => {
+    // Simuleert: activiteit 12:29–12:34 → slot 12:15 krijgt 60 sec, slot 12:30 krijgt 240 sec
+    store.blocks = [
+      makeAggregatorBlock(1, 12, 15, [{ title: 'Inbox - Firefox', seconds: 60 }]),
+      makeAggregatorBlock(2, 12, 30, [{ title: 'Inbox - Firefox', seconds: 240 }]),
+    ]
+    const result1215 = store.getTopActivities(ISO, 735, 750)
+    expect(result1215).toHaveLength(1)
+    expect(result1215[0].seconds).toBe(60)
+
+    const result1230 = store.getTopActivities(ISO, 750, 765)
+    expect(result1230).toHaveLength(1)
+    expect(result1230[0].seconds).toBe(240)
+  })
 })
 
 // ── activityIndicatorsByDay ───────────────────────────────────────────────────

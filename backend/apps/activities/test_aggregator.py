@@ -383,6 +383,46 @@ def test_reaggregate_does_not_restore_rule_assignment():
 
 
 @pytest.mark.django_db
+def test_reaggregate_preserves_manual_unassign():
+    """Na herberekening blijft een handmatig ontkoppeld blok ontkoppeld.
+
+    Een null-project history-entry (assigned_by='manual') markeert de handmatige
+    ontkoppeling. De aggregator herstelt die markering op het nieuwe blok, zodat
+    de rule engine het blok overslaat en het niet opnieuw toewijst.
+    """
+    from apps.projects.models import Project
+    from apps.activities.models import ActivityRule, BlockProjectHistory
+
+    project = Project.objects.create(name="Alpha", color="#aabbcc")
+    ActivityRule.objects.create(
+        project=project,
+        match_field="app_name",
+        match_value="vs code",
+        priority=1,
+    )
+    make_activity("VS Code", 9, 0, duration_seconds=60, save=True)
+
+    aggregate_day(TARGET_DATE)  # rule engine wijst toe aan project
+
+    block = ActivityBlock.objects.get(date=TARGET_DATE)
+    assert block.project == project
+
+    # Gebruiker ontkoppelt handmatig: project leegmaken + null-history aanmaken
+    block.project = None
+    block.save()
+    BlockProjectHistory.objects.create(block=block, project=None, assigned_by="manual")
+
+    # Herberekening (simuleert sync)
+    aggregate_day(TARGET_DATE)
+
+    new_block = ActivityBlock.objects.get(date=TARGET_DATE, started_at=slot_start(9, 0))
+    assert new_block.project is None
+    assert BlockProjectHistory.objects.filter(
+        block=new_block, project__isnull=True, assigned_by="manual"
+    ).exists()
+
+
+@pytest.mark.django_db
 def test_reaggregate_ignores_slot_without_new_block():
     """Als een slot na herberekening leeg is, wordt de snapshot stilzwijgend genegeerd."""
     from apps.projects.models import Project

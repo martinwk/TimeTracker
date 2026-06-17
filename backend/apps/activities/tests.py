@@ -597,15 +597,23 @@ def test_bulk_assign_creates_history_record(api_client, two_unassigned_blocks, p
 
 
 @pytest.mark.django_db
-def test_bulk_assign_null_does_not_create_history(api_client, activity_block_with_project):
-    """POST assign/ met project_id=null maakt géén history aan (er is geen project om te loggen)."""
+def test_bulk_assign_null_creates_unassigned_history_record(api_client, activity_block_with_project):
+    """POST assign/ met project_id=null maakt een history-record aan met project=None.
+
+    Dit markeert de handmatige ontkoppeling zodat de rule engine het blok overslaat
+    bij een volgende sync en de ontkoppeling niet ongedaan maakt.
+    """
     from apps.activities.models import BlockProjectHistory
     api_client.post(
         "/api/activities/activity-blocks/assign/",
         {"block_ids": [activity_block_with_project.id], "project_id": None},
         format="json",
     )
-    assert BlockProjectHistory.objects.filter(block=activity_block_with_project).count() == 0
+    assert BlockProjectHistory.objects.filter(
+        block=activity_block_with_project,
+        project__isnull=True,
+        assigned_by="manual",
+    ).count() == 1
 
 
 # ── API: ActivityBlock — datumbereikfilter (stap 2) ──────────────────────────

@@ -390,9 +390,11 @@ class BlockProjectHistory(models.Model):
     )
     project = models.ForeignKey(
         "projects.Project",
+        null=True,
+        blank=True,
         on_delete=models.CASCADE,
         related_name="block_assignments",
-        help_text="Het project waartoe het block is toegewezen.",
+        help_text="Het project waartoe het block is toegewezen. Null = handmatig ontkoppeld.",
     )
     assigned_at = models.DateTimeField(
         auto_now_add=True,
@@ -418,7 +420,8 @@ class BlockProjectHistory(models.Model):
         ]
 
     def __str__(self):
+        project_name = self.project.name if self.project_id else "ontkoppeld"
         return (
             f"{self.block.app_name} ({self.block.date}) → "
-            f"{self.project.name} ({self.get_assigned_by_display()})"
+            f"{project_name} ({self.get_assigned_by_display()})"
         )

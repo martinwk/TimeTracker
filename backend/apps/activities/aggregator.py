@@ -144,23 +144,33 @@ def aggregate_day(target_date: date, block_minutes: int = DEFAULT_BLOCK_MINUTES)
 
     # Herstel handmatige toewijzingen (Optie C).
     # Loopt vóór de rule engine zodat herstelde blokken worden overgeslagen.
+    # project_id=None betekent: handmatig ontkoppeld — geen project herstellen,
+    # maar wél een null-history aanmaken zodat de rule engine het blok overslaat.
     if manual_snapshot:
         from apps.projects.models import Project
+        non_null_ids = {pid for pid in manual_snapshot.values() if pid is not None}
         project_cache = {
-            p.pk: p for p in Project.objects.filter(pk__in=set(manual_snapshot.values()))
+            p.pk: p for p in Project.objects.filter(pk__in=non_null_ids)
         }
         blocks_to_update = []
         history_records  = []
         for block in ActivityBlock.objects.filter(
             date=target_date, started_at__in=manual_snapshot.keys()
         ):
-            project = project_cache.get(manual_snapshot[block.started_at])
-            if project:
-                block.project = project
-                blocks_to_update.append(block)
+            project_id = manual_snapshot[block.started_at]
+            if project_id is None:
+                # Handmatig ontkoppeld: project leeg laten, history aanmaken om rule engine te blokkeren
                 history_records.append(
-                    BlockProjectHistory(block=block, project=project, assigned_by="manual")
+                    BlockProjectHistory(block=block, project=None, assigned_by="manual")
                 )
+            else:
+                project = project_cache.get(project_id)
+                if project:
+                    block.project = project
+                    blocks_to_update.append(block)
+                    history_records.append(
+                        BlockProjectHistory(block=block, project=project, assigned_by="manual")
+                    )
         if blocks_to_update:
             ActivityBlock.objects.bulk_update(blocks_to_update, ["project"])
         if history_records:

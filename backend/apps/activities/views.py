@@ -282,12 +282,11 @@ class ActivityBlockViewSet(viewsets.ModelViewSet):
             block.project = project
         ActivityBlock.objects.bulk_update(blocks, ["project"])
 
-        if project is not None:
-            from .models import BlockProjectHistory
-            BlockProjectHistory.objects.bulk_create([
-                BlockProjectHistory(block=b, project=project, assigned_by="manual")
-                for b in blocks
-            ])
+        from .models import BlockProjectHistory
+        BlockProjectHistory.objects.bulk_create([
+            BlockProjectHistory(block=b, project=project, assigned_by="manual")
+            for b in blocks
+        ])
 
         return Response({"assigned": len(blocks)}, status=status.HTTP_200_OK)
 

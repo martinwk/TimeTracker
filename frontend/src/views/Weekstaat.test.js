@@ -165,6 +165,20 @@ describe('Weekstaat view', () => {
       await flushPromises()
       expect(wrapper.text()).toContain('1,5u')
     })
+
+    it('toont wandkloktijd (ended_at − started_at) i.p.v. overlaptijd (total_seconds)', async () => {
+      // Aggregator-blok: 1 min overlap maar 15 min slot
+      const block = {
+        ...makeBlock(1, MONDAY, 9, 1, proj1), // total_seconds = 60 sec
+        ended_at: `${MONDAY}T09:15:00Z`,       // slot eindigt 15 min later
+      }
+      mockBlocks([block])
+      store.projects = [proj1]
+      const wrapper = mountView()
+      await flushPromises()
+      // 15 min = 0,25u → formatUren geeft "0,3u"
+      expect(wrapper.text()).toContain('0,3u')
+    })
   })
 
   // ── Totalen ───────────────────────────────────────────────────────────────

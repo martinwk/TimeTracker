@@ -20,6 +20,14 @@
         <div class="text-[10px] text-gray-400 mt-0.5 h-3">
           {{ day.showMonth ? day.month : '' }}
         </div>
+        <div
+          v-if="declaredSecondsByDay[day.iso]"
+          data-testid="dag-gedeclareerd"
+          class="text-[10px] font-semibold mt-0.5"
+          :class="day.isToday ? 'text-blue-500' : 'text-gray-400'"
+        >
+          {{ formatDuration(declaredSecondsByDay[day.iso]) }}
+        </div>
       </div>
     </div>
 
@@ -165,9 +173,10 @@ const totalHeight = 24 * hourHeight
 
 const gridCols = computed(() => ({ gridTemplateColumns: `48px repeat(7, minmax(0, 1fr))` }))
 
-const selectedBlocks         = computed(() => store.selectedBlocks)
-const mergedBlocksByDay      = computed(() => store.mergedBlocksByDay)
+const selectedBlocks          = computed(() => store.selectedBlocks)
+const mergedBlocksByDay       = computed(() => store.mergedBlocksByDay)
 const activityIndicatorsByDay = computed(() => store.activityIndicatorsByDay)
+const declaredSecondsByDay    = computed(() => store.declaredSecondsByDay)
 
 // ── Weekdagen ──────────────────────────────────────────────────────────────────
 const daysOfWeek = computed(() => {

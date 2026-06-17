@@ -100,6 +100,26 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
     return result
   })
 
+  // Wandkloktijd per blok: ended_at − started_at (slot-breedte, altijd 15 min voor
+  // aggregator-blokken). Valt terug op total_seconds voor blokken zonder ended_at.
+  const blockWallClockSeconds = (block) => {
+    if (block.ended_at) {
+      return (new Date(block.ended_at) - new Date(block.started_at)) / 1000
+    }
+    return block.total_seconds
+  }
+
+  // Som van wandkloktijd van toegewezen blokken per dag { 'YYYY-MM-DD': seconds }
+  const declaredSecondsByDay = computed(() => {
+    const result = {}
+    for (const block of blocks.value) {
+      if (!block.project) continue
+      const day = toLocalDateStr(block.started_at)
+      result[day] = (result[day] ?? 0) + blockWallClockSeconds(block)
+    }
+    return result
+  })
+
   // ── Actions ────────────────────────────────────────────────────────────────
   const toggleBlock = (blockId) => {
     const idx = selectedBlocks.value.indexOf(blockId)
@@ -544,6 +564,7 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
   return {
     blocks, projects, selectedBlocks, currentDate,
     isLoading, error, unassignedBlocks, mergedBlocksByDay, activityIndicatorsByDay,
+    declaredSecondsByDay, blockWallClockSeconds,
     toggleBlock, toggleMany, selectBlocks,
     selectAll, selectUnassigned, clearSelection, cancelSelection, selectOrCreateRange,
     fetchWeekBlocks, fetchProjects, createBlock, assignToProject, applyRules,

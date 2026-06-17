@@ -442,3 +442,53 @@ describe('activityBlocks store — getTopActivitiesForIds', () => {
     expect(store.getTopActivitiesForIds([1])).toEqual([])
   })
 })
+
+// ── declaredSecondsByDay ──────────────────────────────────────────────────────
+describe('activityBlocks store — declaredSecondsByDay', () => {
+  let store
+  const P = { id: 1, name: 'Alpha', color: '#aaa' }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    store = useActivityBlocksStore()
+    store.currentDate = ISO
+  })
+
+  it('telt wandkloktijd (ended_at − started_at) per dag voor toegewezen blokken', () => {
+    store.blocks = [
+      makeProjectBlock(1, 9,  0, P),  // ended_at = 9:15, total_seconds = 900
+      makeProjectBlock(2, 9, 15, P),  // ended_at = 9:30, total_seconds = 900
+    ]
+    expect(store.declaredSecondsByDay[ISO]).toBe(1800)
+  })
+
+  it('gebruikt ended_at − started_at ook als total_seconds kleiner is (aggregator-overlap)', () => {
+    store.blocks = [
+      { ...makeProjectBlock(1, 9, 0, P), total_seconds: 60 }, // overlap 60s, slot 900s
+    ]
+    expect(store.declaredSecondsByDay[ISO]).toBe(900)
+  })
+
+  it('valt terug op total_seconds als ended_at ontbreekt', () => {
+    const block = { ...makeProjectBlock(1, 9, 0, P), ended_at: undefined, total_seconds: 450 }
+    store.blocks = [block]
+    expect(store.declaredSecondsByDay[ISO]).toBe(450)
+  })
+
+  it('telt alleen toegewezen blokken mee', () => {
+    store.blocks = [
+      makeProjectBlock(1, 9,  0, P),
+      makeAggregatorBlock(2, 9, 15, [{ title: 'VS Code', seconds: 300 }]),  // geen project
+    ]
+    expect(store.declaredSecondsByDay[ISO]).toBe(900)
+  })
+
+  it('groepeert per dag', () => {
+    store.blocks = [
+      makeProjectBlock(1, 9, 0, P),
+      { ...makeProjectBlock(2, 9, 0, P), started_at: makeLocalISO('2024-01-16', 9, 0), ended_at: makeLocalISO('2024-01-16', 9, 15) },
+    ]
+    expect(store.declaredSecondsByDay[ISO]).toBe(900)
+    expect(store.declaredSecondsByDay['2024-01-16']).toBe(900)
+  })
+})

@@ -154,6 +154,7 @@ import { useActivityBlocksStore } from '@/stores/activityBlocks'
 import { toLocalDateStr, parseLocalDate, getWeekNumber } from '@/utils/date'
 
 const store = useActivityBlocksStore()
+const { blockWallClockSeconds } = store
 
 // ── Weekdagen ──────────────────────────────────────────────────────────────
 const WEEKDAGEN = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo']
@@ -185,13 +186,15 @@ const weekLabel = computed(() => {
 
 // ── Matrix opbouwen ────────────────────────────────────────────────────────
 // { projectId | 'onbekend': { 'YYYY-MM-DD': seconds } }
+// Gebruikt wandkloktijd (ended_at − started_at) zodat aggregator-blokken altijd
+// als volledige 15-min slots tellen, ook als total_seconds slechts de overlap is.
 const matrix = computed(() => {
   const m = {}
   for (const block of store.blocks) {
     const day = toLocalDateStr(block.started_at)
     const key = block.project?.id ?? 'onbekend'
     if (!m[key]) m[key] = {}
-    m[key][day] = (m[key][day] ?? 0) + block.total_seconds
+    m[key][day] = (m[key][day] ?? 0) + blockWallClockSeconds(block)
   }
   return m
 })
@@ -216,7 +219,7 @@ const dagTotaal = (iso) =>
   Object.values(matrix.value).reduce((s, dagMap) => s + (dagMap[iso] ?? 0), 0)
 
 const weekTotaal = computed(() =>
-  store.blocks.reduce((s, b) => s + b.total_seconds, 0)
+  store.blocks.reduce((s, b) => s + blockWallClockSeconds(b), 0)
 )
 
 // ── Opmaak ────────────────────────────────────────────────────────────────

@@ -423,6 +423,48 @@ def test_reaggregate_preserves_manual_unassign():
 
 
 @pytest.mark.django_db
+def test_reaggregate_preserves_manual_unassign_after_previous_manual_assign():
+    """Ontkoppeling wint van eerdere handmatige toewijzing in de snapshot.
+
+    Als een blok eerst handmatig is toegewezen en daarna handmatig ontkoppeld,
+    moet de snapshot de meest recente actie (ontkoppeling) respecteren — niet
+    de oudere toewijzing. Zonder correct ordening overschrijft de oudere entry
+    de nieuwere in de dict comprehension.
+    """
+    from apps.projects.models import Project
+    from apps.activities.models import ActivityRule, BlockProjectHistory
+
+    project = Project.objects.create(name="Alpha", color="#aabbcc")
+    ActivityRule.objects.create(
+        project=project,
+        match_field="app_name",
+        match_value="vs code",
+        priority=1,
+    )
+    make_activity("VS Code", 9, 0, duration_seconds=60, save=True)
+
+    aggregate_day(TARGET_DATE)
+
+    block = ActivityBlock.objects.get(date=TARGET_DATE)
+
+    # Stap 1: handmatig toewijzen (simuleert eerdere gebruikersactie)
+    block.project = project
+    block.save()
+    BlockProjectHistory.objects.create(block=block, project=project, assigned_by="manual")
+
+    # Stap 2: handmatig ontkoppelen (de actie die bewaard moet blijven)
+    block.project = None
+    block.save()
+    BlockProjectHistory.objects.create(block=block, project=None, assigned_by="manual")
+
+    # Herberekening (simuleert sync)
+    aggregate_day(TARGET_DATE)
+
+    new_block = ActivityBlock.objects.get(date=TARGET_DATE, started_at=slot_start(9, 0))
+    assert new_block.project is None
+
+
+@pytest.mark.django_db
 def test_reaggregate_ignores_slot_without_new_block():
     """Als een slot na herberekening leeg is, wordt de snapshot stilzwijgend genegeerd."""
     from apps.projects.models import Project

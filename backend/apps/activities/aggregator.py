@@ -47,10 +47,13 @@ def aggregate_day(target_date: date, block_minutes: int = DEFAULT_BLOCK_MINUTES)
 
     # Snapshot handmatige toewijzingen vóór verwijdering (Optie C).
     # Sleutel: started_at (altijd exact hetzelfde 15-min raster).
+    # Ascending order: the most recent entry per started_at is processed last
+    # and wins in the dict, overriding older entries for the same slot.
     manual_snapshot = {
         entry["block__started_at"]: entry["project_id"]
         for entry in BlockProjectHistory.objects
             .filter(block__date=target_date, assigned_by="manual")
+            .order_by("assigned_at")
             .values("block__started_at", "project_id")
     }
 

@@ -41,9 +41,9 @@ TimeTracker/
 │       └── projects/         # Project model
 └── frontend/
     └── src/
-        ├── views/            # Dashboard, Projects, Weekstaat, Stats
-        ├── components/       # ActivityBlockGrid, ActivityBlock, ProjectSelector
-        ├── stores/           # activityBlocks.js (Pinia)
+        ├── views/            # Dashboard, Projects, Weekstaat, Stats, Rules
+        ├── components/       # ActivityBlockGrid, ActivityBlock, ProjectSelector, SettingsPanel
+        ├── stores/           # activityBlocks.js, projects.js, activityRules.js (Pinia)
         └── api/              # Axios client (baseURL: http://localhost:8000/api)
 ```
 
@@ -90,9 +90,10 @@ pytest
 | Methode | URL | Doel |
 |---|---|---|
 | POST | `/api/activities/import/` | AHK-log uploaden (multipart) |
+| POST | `/api/activities/sync/` | Log importeren + alle dagen herberekenen |
 | POST | `/api/activities/apply-rules/` | Regelengine uitvoeren |
 | GET | `/api/activities/activity-blocks/` | Blokken ophalen (filterbaar op datum, app, project) |
-| GET/POST/PATCH | `/api/activities/activity-rules/` | CRUD voor regels |
+| GET/POST/PATCH/DELETE | `/api/activities/activity-rules/` | CRUD voor regels |
 | GET | `/api/projects/` | Projecten ophalen |
 
 ## Ontwerpkeuzes
@@ -106,12 +107,19 @@ pytest
 
 ## Huidige status
 
-Backend en frontend zijn volledig gekoppeld. Drag-interface werkt (verslepen, verkleinen/vergroten, rangeselecties, projecttoewijzing) en slaat op via de API. Mock data is verwijderd. Projectenpagina (CRUD) en Weekstaat (uren-per-project-matrix) zijn beschikbaar.
+Backend en frontend zijn volledig gekoppeld. Drag-interface werkt (verslepen, verkleinen/vergroten, rangeselecties, projecttoewijzing) en slaat op via de API. Mock data is verwijderd.
 
-Klikken op een toegewezen blok (of een niet-toegewezen blok) toont een toewijzings-/heroewijzings-popup met de onderliggende activiteiten. Via "Koppeling verwijderen" wordt een handmatig aangemaakt blok verwijderd; een aggregator-blok (met AHK-activiteiten) wordt losgekoppeld van het project en verschijnt als grijze achtergrond-indicator. Popups sluiten met Escape; dit wist de selectie en verwijdert eventuele tijdelijke blokken die bij de selectie zijn aangemaakt.
+Beschikbare pagina's:
 
-Nog te doen:
-- Statistiekenpagina
+- **Dashboard** — visuele tijdlijn met blokken per dag; gedeclareerde uren zichtbaar in dag-headers
+- **Weekstaat** — uren-per-project-matrix op basis van wandkloktijd (kwartierblokken)
+- **Projects** — CRUD-beheer voor projecten
+- **Regels** — CRUD-beheer voor auto-assign regels (prioriteit, veld, waarde, project); knop "Regels toepassen" voor de huidige week
+- **Stats** — statistiekenpagina (in ontwikkeling)
+
+Klikken op een toegewezen blok toont een heroewijzings-popup; via "Koppeling verwijderen" wordt een aggregator-blok losgekoppeld (blijft zichtbaar als grijs blok). Handmatige ontkoppelingen overleven herberekening via `BlockProjectHistory`.
+
+De sync-knop (links onderin de sidebar) importeert het AHK-logbestand en herberekent alle betrokken dagen. Het tandwiel ernaast opent het instellingenpaneel met: logpadinstelling (opgeslagen in localStorage), bestandsimport via filepicker, en een knop "Regels opnieuw toepassen".
 
 ## Regex-regels uitbreiden
 

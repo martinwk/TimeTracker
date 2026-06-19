@@ -215,6 +215,7 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
       : null
 
     const deletedBackendIds = []
+    const unassignedAggregatorIds = []  // vrijgekomen aggregator-blokken: ontkoppelen, niet verwijderen
 
     const groupBlocks = blocks.value.filter(b => {
       if (toLocalDateStr(b.started_at) !== iso) return false
@@ -229,12 +230,20 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
       const bEnd   = blockEndMin(block)
 
       if (bEnd <= newStartMin || bStart >= newEndMin) {
-        // Bewaar echte backend-IDs voor de delete-aanroep (temp-IDs zijn > 1e12)
-        if (Number.isInteger(block.id) && block.id > 0 && block.id < 1e12) {
-          deletedBackendIds.push(block.id)
+        // Blok valt buiten de nieuwe range — vrijgekomen door resize.
+        // Aggregator-blokken (met window-activiteiten) worden ontkoppeld en
+        // in de store gehouden zodat ze als grijs unassigned blok verschijnen.
+        // Handmatig aangemaakte blokken (zonder activiteiten) worden verwijderd.
+        const isAggregator = block.unique_activities?.length > 0
+        const isRealId = Number.isInteger(block.id) && block.id > 0 && block.id < 1e12
+        if (isAggregator && isRealId) {
+          block.project = null
+          unassignedAggregatorIds.push(block.id)
+        } else {
+          if (isRealId) deletedBackendIds.push(block.id)
+          const idx = blocks.value.findIndex(b => b.id === block.id)
+          if (idx >= 0) blocks.value.splice(idx, 1)
         }
-        const idx = blocks.value.findIndex(b => b.id === block.id)
-        if (idx >= 0) blocks.value.splice(idx, 1)
         const selIdx = selectedBlocks.value.indexOf(block.id)
         if (selIdx >= 0) selectedBlocks.value.splice(selIdx, 1)
       } else {
@@ -316,6 +325,14 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
 
         const selIdx = selectedBlocks.value.indexOf(localId)
         if (selIdx >= 0) selectedBlocks.value[selIdx] = saved.id
+      }
+
+      // Ontkoppel vrijgekomen aggregator-blokken in de backend
+      if (unassignedAggregatorIds.length > 0) {
+        await api.post('/activities/activity-blocks/assign/', {
+          block_ids:  unassignedAggregatorIds,
+          project_id: null,
+        })
       }
     } catch {
       await fetchWeekBlocks()

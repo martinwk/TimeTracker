@@ -479,6 +479,50 @@ describe('activityBlocks store — API', () => {
       expect(call.deleted_ids).toHaveLength(0)
     })
 
+    it('ontkoppelt vrijgekomen aggregator-blokken via assign/ en houdt ze in de store', async () => {
+      // Twee aaneengesloten aggregator-blokken (met unique_activities) aan hetzelfde project.
+      // Na resize valt blok 11 buiten het nieuwe bereik: het moet ontkoppeld worden,
+      // niet verwijderd, zodat het als grijs unassigned blok zichtbaar blijft.
+      store.blocks = [
+        {
+          id: 10,
+          started_at: makeLocalISO(MONDAY, 9, 0),
+          total_seconds: 1800,
+          dominant_title: 'Backend',
+          project: { id: 2, name: 'Backend', color: '#f59e0b' },
+          unique_activities: [{ title: 'Backend werk', seconds: 900 }],
+        },
+        {
+          id: 11,
+          started_at: makeLocalISO(MONDAY, 9, 30),
+          total_seconds: 1800,
+          dominant_title: 'Backend',
+          project: { id: 2, name: 'Backend', color: '#f59e0b' },
+          unique_activities: [{ title: 'Backend werk', seconds: 900 }],
+        },
+      ]
+      store.projects = [{ id: 2, name: 'Backend', color: '#f59e0b' }]
+      api.post.mockResolvedValue({ data: { created: 0, updated: 1, deleted: 0, blocks: [], assigned: 1 } })
+
+      // Verklein van 9:00-10:00 naar 9:00-9:30 → blok 11 valt buiten nieuw bereik
+      await store.resizeRange(MONDAY, 540, 600, 540, 570, 2)
+
+      // Blok 11 blijft in de store, maar zonder project
+      const block11 = store.blocks.find(b => b.id === 11)
+      expect(block11).toBeDefined()
+      expect(block11.project).toBeNull()
+
+      // bulk/ krijgt blok 11 NIET als deleted_id
+      const bulkCall = api.post.mock.calls.find(c => c[0].includes('/bulk/'))
+      expect(bulkCall[1].deleted_ids).not.toContain(11)
+
+      // assign/ wordt aangeroepen om blok 11 te ontkoppelen
+      expect(api.post).toHaveBeenCalledWith(
+        '/activities/activity-blocks/assign/',
+        { block_ids: [11], project_id: null },
+      )
+    })
+
     it('herlaadt blokken bij een API-fout van resizeRange', async () => {
       store.blocks = [
         {

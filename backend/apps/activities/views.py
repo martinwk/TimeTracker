@@ -100,10 +100,11 @@ class SyncView(APIView):
         data = request.data or {}
         log_path_override = data.get("log_path")
 
+        today = date.today()
         if log_path_override:
-            log_path = Path(log_path_override)
+            p = Path(log_path_override)
+            log_path = p / f"window_log_{today.strftime('%Y-%m')}.txt" if p.is_dir() else p
         else:
-            today = date.today()
             log_path = Path(django_settings.AHK_LOG_DIR) / f"window_log_{today.strftime('%Y-%m')}.txt"
 
         if not log_path.exists():

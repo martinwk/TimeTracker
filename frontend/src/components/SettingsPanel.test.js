@@ -78,7 +78,7 @@ describe('SettingsPanel — bestand importeren', () => {
   })
 
   it('toont importeerresultaat na succesvol importeren', async () => {
-    api.post.mockResolvedValue({ data: { imported: 42 } })
+    api.post.mockResolvedValue({ data: { total_imported: 42 } })
     const wrapper = mountPanel()
 
     const fileInput = wrapper.find('[data-testid="file-input"]')
@@ -91,7 +91,7 @@ describe('SettingsPanel — bestand importeren', () => {
   })
 
   it('ververst de blokken na succesvol importeren', async () => {
-    api.post.mockResolvedValue({ data: { imported: 5 } })
+    api.post.mockResolvedValue({ data: { total_imported: 5 } })
     const wrapper = mountPanel()
 
     const fileInput = wrapper.find('[data-testid="file-input"]')
@@ -117,7 +117,7 @@ describe('SettingsPanel — bestand importeren', () => {
   })
 
   it('stuurt POST naar /activities/import/ met FormData', async () => {
-    api.post.mockResolvedValue({ data: { imported: 1 } })
+    api.post.mockResolvedValue({ data: { total_imported: 1 } })
     const wrapper = mountPanel()
 
     const fileInput = wrapper.find('[data-testid="file-input"]')

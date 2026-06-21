@@ -39,10 +39,11 @@ const sync = async () => {
     }
     await store.fetchWeekBlocks()
   } catch (err) {
+    const detail = err?.response?.data?.error ?? err?.response?.data?.detail
     if (err?.response?.status === 404) {
-      syncError.value = 'Logbestand niet gevonden'
+      syncError.value = detail ?? 'Logbestand niet gevonden'
     } else {
-      syncError.value = 'Fout bij synchroniseren'
+      syncError.value = detail ?? `Fout bij synchroniseren (${err?.response?.status ?? 'netwerk'})`
     }
   } finally {
     syncing.value = false

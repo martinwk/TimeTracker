@@ -39,7 +39,7 @@ const onFileChange = async (e) => {
     const { data } = await api.post('/activities/import/', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
-    importResult.value = data.imported
+    importResult.value = data.total_imported
     await store.fetchWeekBlocks()
   } catch {
     importError.value = 'Fout bij importeren'

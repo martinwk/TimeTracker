@@ -1178,3 +1178,25 @@ def test_sync_response_has_expected_fields(api_client, tmp_path, settings):
 
     assert response.status_code == 200
     assert set(response.data.keys()) == {"log_file", "imported", "days_aggregated", "blocks_created"}
+
+
+@pytest.mark.django_db
+def test_sync_log_path_as_directory_auto_detects_file(api_client, tmp_path, settings):
+    """Als log_path een map is, wordt de maandelijkse log-file automatisch gedetecteerd."""
+    import datetime
+    settings.AHK_LOG_DIR = tmp_path
+    month_str = datetime.date.today().strftime("%Y-%m")
+    log_file = tmp_path / f"window_log_{month_str}.txt"
+    log_file.write_text(
+        f"{month_str[:4]}-{month_str[5:]}-01 09:00:00 - {month_str[:4]}-{month_str[5:]}-01 09:00:30 | 000 min | VS Code\n",
+        encoding="utf-8",
+    )
+
+    response = api_client.post(
+        "/api/activities/sync/",
+        {"log_path": str(tmp_path)},  # map, niet bestand
+        format="json",
+    )
+
+    assert response.status_code == 200
+    assert response.data["imported"] >= 1

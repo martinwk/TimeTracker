@@ -630,3 +630,40 @@ def test_blocks_skipped_manual_counted(zotero_rule, project_admin):
 
     assert result.blocks_skipped_manual == 1
     assert result.blocks_assigned == 1
+
+
+# ── Test: Handmatig ontkoppeld blok wordt wél opnieuw geëvalueerd ────────────
+
+@pytest.mark.django_db
+def test_manually_unassigned_block_is_reevaluated_by_rules(zotero_rule, project_admin):
+    """Blok handmatig ontkoppeld (project=null, assigned_by='manual') → rule engine wijst opnieuw toe."""
+    block = ActivityBlock.objects.create(
+        app_name="Zotero",
+        date=date(2026, 3, 13),
+        started_at=datetime(2026, 3, 13, 9, 0, tzinfo=timezone.utc),
+        ended_at=datetime(2026, 3, 13, 10, 0, tzinfo=timezone.utc),
+        total_seconds=3600,
+        activity_count=1,
+        block_minutes=15,
+        project=None,
+    )
+    # Eerst handmatig toegewezen, daarna handmatig ontkoppeld
+    BlockProjectHistory.objects.create(block=block, project=project_admin, assigned_by="manual")
+    BlockProjectHistory.objects.create(block=block, project=None, assigned_by="manual")
+
+    ua = UniqueActivity.objects.create(block=block, raw_title="Koersnotatie - Zotero", total_seconds=3600)
+    wa = WindowActivity.from_log_line(
+        datetime(2026, 3, 13, 9, 0, tzinfo=timezone.utc),
+        datetime(2026, 3, 13, 10, 0, tzinfo=timezone.utc),
+        "Koersnotatie - Zotero",
+    )
+    wa.date = date(2026, 3, 13)
+    wa.unique_activity = ua
+    wa.save()
+
+    result = apply_rules()
+
+    # Blok mag niet geblokkeerd zijn door de unassign-entry
+    assert result.blocks_assigned == 1
+    block.refresh_from_db()
+    assert block.project == zotero_rule.project

@@ -146,9 +146,11 @@ def aggregate_day(target_date: date, block_minutes: int = DEFAULT_BLOCK_MINUTES)
     )
 
     # Herstel handmatige toewijzingen (Optie C).
-    # Loopt vóór de rule engine zodat herstelde blokken worden overgeslagen.
-    # project_id=None betekent: handmatig ontkoppeld — geen project herstellen,
-    # maar wél een null-history aanmaken zodat de rule engine het blok overslaat.
+    # Niet-null toewijzingen worden vóór de rule engine hersteld zodat de engine die
+    # blokken overslaat. Null-toewijzingen (ontkoppelingen) worden ná de rule engine
+    # geforceerd, zodat sync de handmatige ontkoppeling respecteert terwijl een
+    # expliciete "Regels toepassen" wél opnieuw kan toewijzen.
+    null_snapshot_starts: set = set()
     if manual_snapshot:
         from apps.projects.models import Project
         non_null_ids = {pid for pid in manual_snapshot.values() if pid is not None}
@@ -162,10 +164,7 @@ def aggregate_day(target_date: date, block_minutes: int = DEFAULT_BLOCK_MINUTES)
         ):
             project_id = manual_snapshot[block.started_at]
             if project_id is None:
-                # Handmatig ontkoppeld: project leeg laten, history aanmaken om rule engine te blokkeren
-                history_records.append(
-                    BlockProjectHistory(block=block, project=None, assigned_by="manual")
-                )
+                null_snapshot_starts.add(block.started_at)
             else:
                 project = project_cache.get(project_id)
                 if project:
@@ -188,6 +187,17 @@ def aggregate_day(target_date: date, block_minutes: int = DEFAULT_BLOCK_MINUTES)
         rules_result.blocks_assigned,
         rules_result.blocks_skipped_manual,
     )
+
+    # Forceer null-toewijzingen ná de rule engine (handmatige ontkoppelingen overleven sync).
+    if null_snapshot_starts:
+        null_blocks = list(ActivityBlock.objects.filter(
+            date=target_date, started_at__in=null_snapshot_starts
+        ))
+        ActivityBlock.objects.filter(pk__in=[b.pk for b in null_blocks]).update(project=None)
+        BlockProjectHistory.objects.bulk_create([
+            BlockProjectHistory(block=b, project=None, assigned_by="manual")
+            for b in null_blocks
+        ])
 
     return AggregateResult(
         date=target_date,

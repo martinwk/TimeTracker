@@ -105,7 +105,7 @@ Backend is complete (models, importer, aggregator, rule engine, DRF API). Fronte
 
 **Serializer:** `project` is a nested read-only object `{ id, name, color }`; write via `project_id` (write-only FK field).
 
-**Test coverage:** 164 backend tests (pytest), 292 frontend tests (Vitest).
+**Test coverage:** 166 backend tests (pytest), 292 frontend tests (Vitest).
 
 **Bulk endpoint — ID-onderscheid:** Temp-IDs (aangemaakt in de frontend met `Date.now() * 1000 + m`) zijn > 1e12. Echte backend-IDs zijn < 1e12. De frontend stuurt alleen echte IDs mee in `deleted_ids`.
 
@@ -131,7 +131,7 @@ Key TODO:
 - **Projectnummers, subnummers en activiteitennummers.** Breid het `Project`-model uit met: `number` (bijv. `2024-042`), `sub_number` (optioneel), `activity_number` (optioneel), `title` (bestaand `name`-veld hernoemen of als alias bijhouden) en `alias` (korte alternatieve naam). Dit maakt het mogelijk om te declareren conform externe projectadministratie (bijv. urenregistratiesysteem van opdrachtgever).
 - **Zoeken op project bij bloktoewijzing.** In de `SlotSuggestion`-popup en `ProjectSelector`-modal een zoekbalk toevoegen waarmee de gebruiker kan filteren op projectnaam, nummer of alias. Zoekopdracht werkt client-side op de reeds geladen projectenlijst.
 - **"Nieuw project"-knop in toewijzingspopup.** Voeg onderaan de projectkeuzelijst in de `SlotSuggestion`-popup / `ProjectSelector`-modal een knop toe "＋ Nieuw project aanmaken". Klikken opent een inline formulier (naam, kleur, optioneel nummer) en slaat het direct op via `POST /api/projects/`. Het nieuwe project verschijnt direct in de keuzelijst en wordt geselecteerd.
-- **BUG: Auto-toewijzen werkt niet na handmatig ontkoppelen.** Als een blok eerst handmatig wordt ontkoppeld via "Koppeling verwijderen", en daarna "Regels toepassen" wordt aangeroepen, wordt het blok overgeslagen. Oorzaak: de rule engine sluit blokken uit met een `assigned_by='manual'` history-entry — ook als die entry een ontkoppeling (`project=null`) registreert. Een latere handmatige unassign zou de regel-engine juist moeten vrijgeven, niet permanent blokkeren. Oplossing: de `Exists`-subquery moet alleen blokken uitsluiten met een `assigned_by='manual'` entry waarbij `project` niet null is.
+- ~~**BUG: Auto-toewijzen werkt niet na handmatig ontkoppelen.**~~ Opgelost: de `Exists`-subquery in de rule engine controleert nu of de meest recente `assigned_by='manual'` history-entry een niet-null project heeft. Een handmatige unassign (`project=null`) vrijgeeft het blok zodat de rule engine het opnieuw kan evalueren. De aggregator forceert null-snapshots ná de rule engine zodat sync de handmatige ontkoppeling respecteert.
 
 ---
 
@@ -172,28 +172,26 @@ Use **Git Bash** (not PowerShell or cmd) for all shell commands in this project.
 
 ## Running the project
 
-**Backend:**
+**Backend** (run from `backend/`):
 
 ```bash
-cd backend
-source .venv/Scripts/activate
 python manage.py runserver
 ```
 
-**Frontend:**
+**Frontend** (run from `frontend/`):
 
 ```bash
-cd frontend
 npm run dev
 ```
 
 Frontend dev server proxies to `http://localhost:8000`. Both must run simultaneously.
 
-**Tests (backend):**
+**Tests (backend)** (run from `backend/`):
 
 ```bash
-cd backend
 pytest
+# or a specific file:
+pytest apps/activities/test_rule_engine.py -v
 ```
 
 Backend tests live in:

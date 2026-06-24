@@ -3,8 +3,9 @@ Rule engine voor het automatisch koppelen van ActivityBlocks aan projecten.
 
 Algoritme:
   1. Haal alle actieve ActivityRules op, gesorteerd op prioriteit (laag = belangrijk)
-  2. Blokken met een handmatige toewijzing (BlockProjectHistory.assigned_by='manual')
-     worden overgeslagen — handmatige keuzes worden nooit overschreven.
+  2. Blokken met een actieve handmatige toewijzing (assigned_by='manual', project≠null)
+     worden overgeslagen. Een handmatige unassign (project=null) vrijgeeft het blok
+     zodat de rule engine het opnieuw kan evalueren.
   3. Blokken met een rule-toewijzing worden wél opnieuw geëvalueerd zodat
      regelwijzigingen doorwerken.
   4. Per block: loop through regels totdat één matcht; wijs toe als het project verandert.
@@ -16,7 +17,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Optional
 
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Subquery
 
 from apps.activities.models import ActivityRule, ActivityBlock, BlockProjectHistory
 
@@ -38,7 +39,8 @@ def apply_rules(
     """
     Voer alle actieve ActivityRules toe op ActivityBlocks.
 
-    Blokken met een handmatige toewijzing worden beschermd en overgeslagen.
+    Blokken met een actieve handmatige toewijzing (project≠null) worden beschermd.
+    Blokken handmatig ontkoppeld (project=null) worden wél geëvalueerd.
     Blokken met een rule-toewijzing worden opnieuw geëvalueerd.
     """
     rules = ActivityRule.objects.filter(is_active=True).order_by("priority")
@@ -51,10 +53,20 @@ def apply_rules(
             blocks_processed=0,
         )
 
-    # Subquery: heeft dit blok een handmatige toewijzing in de history?
-    has_manual_assignment = BlockProjectHistory.objects.filter(
-        block=OuterRef("pk"),
-        assigned_by="manual",
+    # Subquery: is de meest recente manual history-entry een toewijzing (project≠null)?
+    # Een handmatige unassign (project=null) vrijgeeft het blok voor de rule engine.
+    has_manual_assignment = Exists(
+        BlockProjectHistory.objects.filter(
+            block=OuterRef("pk"),
+            assigned_by="manual",
+            project__isnull=False,
+            assigned_at=Subquery(
+                BlockProjectHistory.objects.filter(
+                    block=OuterRef(OuterRef("pk")),
+                    assigned_by="manual",
+                ).order_by("-assigned_at").values("assigned_at")[:1]
+            ),
+        )
     )
 
     date_qs = ActivityBlock.objects.all()
@@ -63,8 +75,8 @@ def apply_rules(
     if date_to:
         date_qs = date_qs.filter(date__lte=date_to)
 
-    blocks_skipped_manual = date_qs.filter(Exists(has_manual_assignment)).count()
-    blocks = date_qs.exclude(Exists(has_manual_assignment)).order_by("date", "started_at")
+    blocks_skipped_manual = date_qs.filter(has_manual_assignment).count()
+    blocks = date_qs.exclude(has_manual_assignment).order_by("date", "started_at")
 
     blocks_assigned = 0
     blocks_processed = 0

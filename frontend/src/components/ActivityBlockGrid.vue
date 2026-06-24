@@ -67,7 +67,7 @@
             v-for="h in 24"
             :key="h"
             class="absolute inset-x-0 border-t pointer-events-none"
-            :class="(h - 1) % 2 === 0 ? 'border-gray-100' : 'border-gray-50'"
+            :class="'border-gray-100'"
             :style="{ top: (h - 1) * hourHeight + 'px' }"
           />
 

@@ -41,6 +41,7 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
   const currentDate    = ref(getMonday(today))
   const isLoading      = ref(false)
   const error          = ref(null)
+  const gridStartHour  = ref(parseInt(localStorage.getItem('grid_start_hour') ?? '7'))
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   const isAggregatorUnassigned = (block) =>
@@ -578,10 +579,16 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
     fetchWeekBlocks()
   }
 
+  const setGridStartHour = (hour) => {
+    gridStartHour.value = hour
+    localStorage.setItem('grid_start_hour', String(hour))
+  }
+
   return {
     blocks, projects, selectedBlocks, currentDate,
     isLoading, error, unassignedBlocks, mergedBlocksByDay, activityIndicatorsByDay,
     declaredSecondsByDay, blockWallClockSeconds,
+    gridStartHour, setGridStartHour,
     toggleBlock, toggleMany, selectBlocks,
     selectAll, selectUnassigned, clearSelection, cancelSelection, selectOrCreateRange,
     fetchWeekBlocks, fetchProjects, createBlock, assignToProject, applyRules,

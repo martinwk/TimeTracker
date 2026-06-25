@@ -38,12 +38,12 @@
         <!-- Tijdlabel kolom -->
         <div class="relative border-r border-gray-200" :style="{ height: totalHeight + 'px', minWidth: '48px' }">
           <div
-            v-for="h in 24"
+            v-for="h in visibleHours"
             :key="h"
             class="absolute right-1 text-[10px] text-gray-300 font-mono leading-none"
-            :style="{ top: (h - 1) * hourHeight - 6 + 'px' }"
+            :style="{ top: (h - store.gridStartHour) * hourHeight - 6 + 'px' }"
           >
-            {{ String(h - 1).padStart(2, '0') }}:00
+            {{ String(h).padStart(2, '0') }}:00
           </div>
         </div>
 
@@ -64,11 +64,10 @@
         >
           <!-- Uurlijnen -->
           <div
-            v-for="h in 24"
+            v-for="h in visibleHours"
             :key="h"
-            class="absolute inset-x-0 border-t pointer-events-none"
-            :class="'border-gray-100'"
-            :style="{ top: (h - 1) * hourHeight + 'px' }"
+            class="absolute inset-x-0 border-t pointer-events-none border-gray-100"
+            :style="{ top: (h - store.gridStartHour) * hourHeight + 'px' }"
           />
 
           <!-- Huidige-tijd lijn -->
@@ -119,6 +118,7 @@
             :is-selected="group.blocks.every(b => selectedBlocks.includes(b.id))"
             :is-dragging="!!activeMove && activeMove.blockIds.some(id => group.blocks.find(b => b.id === id))"
             :hour-height="hourHeight"
+            :start-min="startMin"
             @move-start="onMoveStart($event, day.iso)"
             @resize-start="onResizeStart($event, day.iso)"
           />
@@ -169,7 +169,9 @@ const store   = useActivityBlocksStore()
 const gridEl  = ref(null)
 
 const hourHeight  = 56
-const totalHeight = 24 * hourHeight
+const totalHeight = computed(() => (24 - store.gridStartHour) * hourHeight)
+const startMin    = computed(() => store.gridStartHour * 60)
+const visibleHours = computed(() => Array.from({ length: 24 - store.gridStartHour }, (_, i) => i + store.gridStartHour))
 
 const gridCols = computed(() => ({ gridTemplateColumns: `48px repeat(7, minmax(0, 1fr))` }))
 
@@ -202,16 +204,19 @@ const daysOfWeek = computed(() => {
 const currentTimeTop = ref(null)
 let timer = null
 const updateCurrentTime = () => {
-  const now = new Date()
-  currentTimeTop.value = (now.getHours() * 60 + now.getMinutes()) / 60 * hourHeight
+  const now     = new Date()
+  const nowMin  = now.getHours() * 60 + now.getMinutes()
+  currentTimeTop.value = nowMin < startMin.value
+    ? null
+    : (nowMin - startMin.value) / 60 * hourHeight
 }
 onMounted(() => { updateCurrentTime(); timer = setInterval(updateCurrentTime, 60_000) })
 onUnmounted(() => clearInterval(timer))
 
 // ── Pure helpers (geen store-referenties) ──────────────────────────────────────
-const snap   = (min) => Math.round(min / 15) * 15          // dichtstbijzijnde slot (voor drag)
-const clamp  = (min) => Math.max(0, Math.min(min, 24 * 60 - 15))
-const yToMin = (y)   => Math.floor(y / hourHeight * 60 / 15) * 15  // slot dat de klik BEVAT (floor)
+const snap   = (min) => Math.round(min / 15) * 15
+const clamp  = (min) => Math.max(startMin.value, Math.min(min, 24 * 60 - 15))
+const yToMin = (y)   => Math.floor(y / hourHeight * 60 / 15) * 15 + startMin.value
 
 const formatDuration = (seconds) => {
   const m = Math.floor(seconds / 60)
@@ -226,7 +231,7 @@ const indicatorStyle = (block) => {
   const d      = parseLocalDate(block.started_at)
   const start  = d.getHours() * 60 + d.getMinutes()
   return {
-    top:             (start / 60) * hourHeight + 'px',
+    top:             ((start - startMin.value) / 60) * hourHeight + 'px',
     height:          (15 / 60) * hourHeight + 'px',
     backgroundColor: '#eff6ff',    // blue-50
     borderLeft:      '2px solid #bfdbfe', // blue-200
@@ -273,14 +278,14 @@ const selDragStyle = computed(() => {
   if (!selDrag.value) return {}
   const start  = Math.min(selDrag.value.startMin, selDrag.value.curMin)
   const end    = Math.max(selDrag.value.startMin, selDrag.value.curMin) + 15
-  const top    = (start / 60) * hourHeight
+  const top    = ((start - startMin.value) / 60) * hourHeight
   const height = ((end - start) / 60) * hourHeight
   return { top: top + 'px', height: Math.max(height, 4) + 'px' }
 })
 
 const onSelDragMove = (e) => {
   if (!selDrag.value) return
-  const y = Math.max(0, Math.min(e.clientY - selDrag.value.rect.top, totalHeight))
+  const y = Math.max(0, Math.min(e.clientY - selDrag.value.rect.top, totalHeight.value))
   selDrag.value = { ...selDrag.value, curMin: yToMin(y) }
 }
 
@@ -341,7 +346,7 @@ const movePreviewStyle = computed(() => {
   if (!activeMove.value) return {}
   const { previewStart, durationMin } = activeMove.value
   return {
-    top:    (previewStart / 60) * hourHeight + 'px',
+    top:    ((previewStart - startMin.value) / 60) * hourHeight + 'px',
     height: Math.max((durationMin / 60) * hourHeight, 12) + 'px',
   }
 })
@@ -384,7 +389,7 @@ const onMoveDragMove = (e) => {
   if (!rect) return
 
   const y         = e.clientY - rect.top
-  const clickMin  = yToMin(Math.max(0, Math.min(y, totalHeight)))
+  const clickMin  = yToMin(Math.max(0, Math.min(y, totalHeight.value)))
   const newStart  = clamp(snap(clickMin - activeMove.value.clickOffsetMin))
   const moved     = activeMove.value.moved ||
     newStart !== activeMove.value.previewStart ||
@@ -449,13 +454,11 @@ const activeResize = ref(null)
 const resizePreviewStyle = computed(() => {
   if (!activeResize.value) return {}
   const { fixedMin, curMin, edge } = activeResize.value
-  // bottom-resize: vast = top,    sleep = bodem
-  // top-resize:    vast = bodem,  sleep = top
-  const startMin = edge === 'bottom' ? fixedMin                    : curMin
-  const endMin   = edge === 'bottom' ? curMin                      : fixedMin
+  const resizeStartMin = edge === 'bottom' ? fixedMin : curMin
+  const resizeEndMin   = edge === 'bottom' ? curMin   : fixedMin
   return {
-    top:    (startMin / 60) * hourHeight + 'px',
-    height: Math.max(((endMin - startMin) / 60) * hourHeight, 12) + 'px',
+    top:    ((resizeStartMin - startMin.value) / 60) * hourHeight + 'px',
+    height: Math.max(((resizeEndMin - resizeStartMin) / 60) * hourHeight, 12) + 'px',
   }
 })
 
@@ -493,7 +496,7 @@ const onResizeDragMove = (e) => {
   if (!rect) return
 
   const y      = e.clientY - rect.top
-  const rawMin = snap(Math.max(0, Math.min(y / hourHeight * 60, 24 * 60)))
+  const rawMin = snap(Math.max(startMin.value, Math.min(y / hourHeight * 60 + startMin.value, 24 * 60)))
 
   // Blokkeer omkeren: bodem mag niet boven top, top mag niet onder bodem
   const { edge, fixedMin } = activeResize.value
@@ -568,7 +571,7 @@ const onColumnMouseMove = (e, iso) => {
   }
 
   const rect    = e.currentTarget.getBoundingClientRect()
-  const rawMin  = Math.floor((e.clientY - rect.top) / hourHeight * 60)
+  const rawMin  = Math.floor((e.clientY - rect.top) / hourHeight * 60) + startMin.value
   const slotMin = Math.floor(rawMin / 15) * 15
   const activities = store.getTopActivities(iso, slotMin, slotMin + 15)
   hoveredSlot.value = activities.length > 0

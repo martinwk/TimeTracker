@@ -12,6 +12,15 @@ const emit = defineEmits(['close'])
 
 const store = useActivityBlocksStore()
 
+// ── Begintijd grid ────────────────────────────────────────────────────────────
+const startHour = ref(store.gridStartHour)
+
+const onStartHourChange = (e) => {
+  const hour = parseInt(e.target.value)
+  startHour.value = hour
+  store.setGridStartHour(hour)
+}
+
 // ── Log pad ──────────────────────────────────────────────────────────────────
 const logPath = ref(localStorage.getItem('ahk_log_path') ?? '')
 
@@ -96,6 +105,21 @@ const applyRules = async () => {
         </svg>
       </button>
     </div>
+
+    <!-- Begintijd grid -->
+    <section>
+      <label class="block text-xs font-medium text-gray-600 mb-1">Begintijd tijdlijn</label>
+      <select
+        data-testid="start-hour-select"
+        :value="startHour"
+        @change="onStartHourChange"
+        class="w-full text-xs border rounded px-2 py-1.5 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
+      >
+        <option v-for="h in 13" :key="h - 1" :value="h - 1">
+          {{ String(h - 1).padStart(2, '0') }}:00
+        </option>
+      </select>
+    </section>
 
     <!-- Log pad -->
     <section>

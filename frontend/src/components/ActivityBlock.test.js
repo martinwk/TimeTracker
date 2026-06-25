@@ -41,6 +41,18 @@ describe('ActivityBlock — stijl', () => {
     expect(wrapper.attributes('style')).toContain('top: 570px')
   })
 
+  it('past de top-positie aan met startMin (begintijd grid)', () => {
+    // 9:00, startMin=420 (07:00) → (540 - 420) / 60 * 60 = 120px
+    const wrapper = mountBlock(makeBlock(9, 0, 60), { startMin: 420 })
+    expect(wrapper.attributes('style')).toContain('top: 120px')
+  })
+
+  it('startMin=0 geeft hetzelfde resultaat als standaard', () => {
+    // 9:00, startMin=0 → 540px (identiek aan geen startMin)
+    const wrapper = mountBlock(makeBlock(9, 0, 60), { startMin: 0 })
+    expect(wrapper.attributes('style')).toContain('top: 540px')
+  })
+
   it('berekent de juiste hoogte op basis van duur', () => {
     // 60 min → (60/60) * 60 = 60px
     const wrapper = mountBlock(makeBlock(9, 0, 60))

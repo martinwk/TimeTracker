@@ -69,6 +69,7 @@ const props = defineProps({
   isSelected: { type: Boolean, default: false },
   isDragging: { type: Boolean, default: false },
   hourHeight: { type: Number,  required: true },
+  startMin:   { type: Number,  default: 0 },
 })
 
 const emit = defineEmits(['move-start', 'resize-start'])
@@ -118,7 +119,7 @@ const style = computed(() => {
   const first           = primaryBlock.value
   const start           = parseLocalDate(first.started_at)
   const minFromMidnight = start.getHours() * 60 + start.getMinutes()
-  const top             = (minFromMidnight / 60) * props.hourHeight
+  const top             = ((minFromMidnight - props.startMin) / 60) * props.hourHeight
   const height          = Math.max((visualDurationMin.value / 60) * props.hourHeight, 12)
   const bg              = project.value ? project.value.color + '28' : '#f1f5f9'
   return { top: top + 'px', height: height + 'px', backgroundColor: bg }

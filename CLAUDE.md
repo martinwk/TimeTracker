@@ -105,7 +105,7 @@ Backend is complete (models, importer, aggregator, rule engine, DRF API). Fronte
 
 **Serializer:** `project` is a nested read-only object `{ id, name, color }`; write via `project_id` (write-only FK field).
 
-**Test coverage:** 166 backend tests (pytest), 292 frontend tests (Vitest).
+**Test coverage:** 166 backend tests (pytest), 300 frontend tests (Vitest).
 
 **Bulk endpoint — ID-onderscheid:** Temp-IDs (aangemaakt in de frontend met `Date.now() * 1000 + m`) zijn > 1e12. Echte backend-IDs zijn < 1e12. De frontend stuurt alleen echte IDs mee in `deleted_ids`.
 
@@ -132,10 +132,10 @@ Key TODO:
 - **Zoeken op project bij bloktoewijzing.** In de `SlotSuggestion`-popup en `ProjectSelector`-modal een zoekbalk toevoegen waarmee de gebruiker kan filteren op projectnaam, nummer of alias. Zoekopdracht werkt client-side op de reeds geladen projectenlijst.
 - **"Nieuw project"-knop in toewijzingspopup.** Voeg onderaan de projectkeuzelijst in de `SlotSuggestion`-popup / `ProjectSelector`-modal een knop toe "＋ Nieuw project aanmaken". Klikken opent een inline formulier (naam, kleur, optioneel nummer) en slaat het direct op via `POST /api/projects/`. Het nieuwe project verschijnt direct in de keuzelijst en wordt geselecteerd.
 - ~~**BUG: Auto-toewijzen werkt niet na handmatig ontkoppelen.**~~ Opgelost: de `Exists`-subquery in de rule engine controleert nu of de meest recente `assigned_by='manual'` history-entry een niet-null project heeft. Een handmatige unassign (`project=null`) vrijgeeft het blok zodat de rule engine het opnieuw kan evalueren. De aggregator forceert null-snapshots ná de rule engine zodat sync de handmatige ontkoppeling respecteert.
-- **BUG (lage prio): Tekst "tijdregistratie" valt buiten de zijbalk.** De `<h1>` in de sidebar wordt visueel afgeknipt op dit systeem — oorzaak onduidelijk (geen repro met standaard Tailwind w-64/p-4). Eerdere CSS-pogingen (truncate, overflow-hidden, overflow-x-hidden op aside) losten het niet op zonder bijeffecten. Workaround: text-xs/text-sm of de tekst inkorten.
+- ~~**BUG (lage prio): Tekst "tijdregistratie" valt buiten de zijbalk.**~~ Opgelost: `<h1>` vervangen door `<div class="truncate">` in Sidebar.vue.
 - **Commentaar per weekstaat (samen oppakken met "Projectnummers, subnummers en activiteitennummers").** Voeg een vrij tekstveld toe bij elke weekstaat (per week) waaraan de gebruiker een notitie of opmerking kan koppelen, bijv. voor declaratietoelichting. Opslaan in de backend (nieuw model of veld op weekniveau).
 - ~~**Dashboard: begintijd instellen, standaard 07:00.**~~ Geïmplementeerd: `gridStartHour` in de Pinia store (default 7, opgeslagen in localStorage). Grid, tijdlabels, uurlijnen, huidige-tijdlijn, drag-coördinaten en `ActivityBlock`-positie passen zich aan. Instelbaar via ⚙️ → "Begintijd tijdlijn" (keuze 00:00–12:00).
-- **Dashboard: tekst in kleine blokken (15/30 min) blijft zichtbaar.** Bij korte blokken valt de projectnaam weg. Toon de tekst altijd, maar pas het font aan de beschikbare ruimte aan: kleiner lettertype bij minder hoogte, of kapt de naam af met een ellipsis. Minimale leesbaarheid heeft prioriteit boven volledige naam.
+- ~~**Dashboard: tekst in kleine blokken (15/30 min) blijft zichtbaar.**~~ Opgelost: `isSmall` computed (drempel 40px) toont altijd de titel; duur verborgen bij kleine blokken. `hourHeight` verhoogd van 56 → 70px voor meer ruimte.
 
 ---
 
@@ -215,15 +215,18 @@ Backend tests live in:
 
 Frontend tests (Vitest) live next to their source files:
 
-- `frontend/src/stores/activityBlocks.test.js` — store state & mutations
-- `frontend/src/stores/activityBlocks.logic.test.js` — computed/logic
-- `frontend/src/stores/activityBlocks.api.test.js` — API integration
+- `frontend/src/stores/activityBlocks.test.js` — store logica & state-mutaties (mergedBlocksByDay, moveBlocks, resizeRange, selectOrCreateRange, getTopActivities, etc.)
+- `frontend/src/stores/activityBlocks.api.test.js` — API-integratie (fetchWeekBlocks, assignToProject, createBlock, etc.)
 - `frontend/src/stores/projects.test.js` — projects store
+- `frontend/src/stores/activityRules.test.js` — activityRules store
 - `frontend/src/components/ActivityBlock.test.js` — ActivityBlock component
 - `frontend/src/components/SlotSuggestion.test.js` — SlotSuggestion popup (keyboard handling)
 - `frontend/src/components/ProjectSelector.test.js` — ProjectSelector modal (keyboard handling)
+- `frontend/src/components/Sidebar.test.js` — Sidebar sync-knop en instellingen
+- `frontend/src/components/SettingsPanel.test.js` — SettingsPanel
 - `frontend/src/views/Projects.test.js` — Projects view
 - `frontend/src/views/Weekstaat.test.js` — Weekstaat view
+- `frontend/src/views/Rules.test.js` — Rules view
 - `frontend/src/utils/date.test.js` — date utilities
 
 ---

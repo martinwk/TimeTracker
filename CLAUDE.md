@@ -166,7 +166,14 @@ Conclude with a summary: how many changes are qualitatively sound, how many need
 
 **If any findings are reported (missing tests or quality issues): do not commit. Present the findings and explicitly ask what to do with each issue before proceeding.**
 
-**Commit approval required:** After the quality check, always present the findings to the user and explicitly ask for approval before executing the commit. Never commit autonomously, even when all findings are sound.
+1. **Manual test scenarios** — after the quality and coverage assessments, always provide a concrete checklist of scenarios the user can manually verify in the running app. For each scenario:
+   - Describe the action to take in the UI or via curl/API
+   - State the expected outcome
+   - Note any edge cases or regressions to watch for
+
+   Keep scenarios short and actionable — they serve as a quick smoke test before the user approves the commit.
+
+**Commit approval required:** After the quality check and manual scenarios, always present the findings to the user and explicitly ask for approval before executing the commit. Never commit autonomously, even when all findings are sound.
 
 **Linter and IDE warnings:** When the IDE reports warnings (Sourcery, markdownlint, etc.) on files touched by a change, address them in the same commit if they are relevant to the changed code. Do not dismiss them as "pre-existing" without fixing them.
 

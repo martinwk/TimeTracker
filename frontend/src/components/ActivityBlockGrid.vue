@@ -168,7 +168,7 @@ import SlotSuggestion from '@/components/SlotSuggestion.vue'
 const store   = useActivityBlocksStore()
 const gridEl  = ref(null)
 
-const hourHeight  = 56
+const hourHeight  = 70
 const totalHeight = computed(() => (24 - store.gridStartHour) * hourHeight)
 const startMin    = computed(() => store.gridStartHour * 60)
 const visibleHours = computed(() => Array.from({ length: 24 - store.gridStartHour }, (_, i) => i + store.gridStartHour))

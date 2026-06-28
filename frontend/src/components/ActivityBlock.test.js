@@ -179,18 +179,37 @@ describe('ActivityBlock — weergave', () => {
     expect(wrapper.text()).not.toContain('2u0m')
   })
 
-  it('toont geen titeltekst voor te kleine blokken (isLargeEnough=false)', () => {
-    // 15 min met hourHeight=60 → (15/60)*60=15px < 22 → isLargeEnough=false
+  it('toont titeltekst altijd, ook voor kleine blokken', () => {
+    // 15 min met hourHeight=60 → 15px blok; titel altijd zichtbaar
     const wrapper = mountBlock(makeBlock(9, 0, 15))
-    // De titel-span is conditioneel op isLargeEnough
-    const titleSpans = wrapper.findAll('span.text-\\[10px\\]')
-    expect(titleSpans).toHaveLength(0)
+    expect(wrapper.text()).toContain('Test blok')
   })
 
-  it('toont titeltekst voor grote genoeg blokken', () => {
-    // 60 min met hourHeight=60 → 60px ≥ 22 → isLargeEnough=true
+  it('kleine blokken (< 40px) krijgen font-size 9px via inline style', () => {
+    // 15 min, hourHeight=60 → hoogte=15px < 40 → 9px
+    const wrapper = mountBlock(makeBlock(9, 0, 15))
+    const span = wrapper.find('span.font-medium')
+    expect(span.attributes('style')).toContain('font-size: 9px')
+  })
+
+  it('normale blokken (≥ 40px) krijgen font-size 10px via inline style', () => {
+    // 60 min, hourHeight=60 → hoogte=60px ≥ 40 → 10px
     const wrapper = mountBlock(makeBlock(9, 0, 60))
+    const span = wrapper.find('span.font-medium')
+    expect(span.attributes('style')).toContain('font-size: 10px')
     expect(wrapper.text()).toContain('Test blok')
+  })
+
+  it('kleine blokken (< 40px) tonen geen duur', () => {
+    // 30 min, hourHeight=60 → 30px < 40 → duur-div weggelaten
+    const wrapper = mountBlock(makeBlock(9, 0, 30))
+    expect(wrapper.text()).not.toContain('30m')
+  })
+
+  it('normale blokken (≥ 40px) tonen de duur', () => {
+    // 45 min, hourHeight=60 → 45px ≥ 40 → duur zichtbaar
+    const wrapper = mountBlock(makeBlock(9, 0, 45))
+    expect(wrapper.text()).toContain('45m')
   })
 
   it('toont aantal× indicator voor gemerged blok', () => {

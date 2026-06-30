@@ -29,15 +29,18 @@
     </div>
 
     <!-- Inhoud -->
-    <div class="absolute inset-0 flex flex-col justify-between p-0.5 pl-1.5 overflow-hidden rounded">
+    <div
+      class="absolute inset-0 flex flex-col overflow-hidden rounded"
+      :class="isSmall ? 'justify-center pl-1' : 'justify-between p-0.5 pl-1.5'"
+    >
       <span
-        v-if="isLargeEnough"
-        class="text-[10px] leading-tight font-medium truncate"
+        class="leading-tight font-medium truncate"
+        :style="{ fontSize: titleFontSize }"
         :class="project ? 'text-gray-800' : 'text-gray-500'"
       >
         {{ displayTitle }}
       </span>
-      <div class="flex items-center justify-end gap-1">
+      <div v-if="!isSmall" class="flex items-center justify-end gap-1">
         <span v-if="props.blocks && props.blocks.length > 1" class="text-[9px] text-gray-300">
           {{ props.blocks.length }}×
         </span>
@@ -69,6 +72,7 @@ const props = defineProps({
   isSelected: { type: Boolean, default: false },
   isDragging: { type: Boolean, default: false },
   hourHeight: { type: Number,  required: true },
+  startMin:   { type: Number,  default: 0 },
 })
 
 const emit = defineEmits(['move-start', 'resize-start'])
@@ -118,15 +122,15 @@ const style = computed(() => {
   const first           = primaryBlock.value
   const start           = parseLocalDate(first.started_at)
   const minFromMidnight = start.getHours() * 60 + start.getMinutes()
-  const top             = (minFromMidnight / 60) * props.hourHeight
+  const top             = ((minFromMidnight - props.startMin) / 60) * props.hourHeight
   const height          = Math.max((visualDurationMin.value / 60) * props.hourHeight, 12)
   const bg              = project.value ? project.value.color + '28' : '#f1f5f9'
   return { top: top + 'px', height: height + 'px', backgroundColor: bg }
 })
 
-const isLargeEnough = computed(() => {
-  return (visualDurationMin.value / 60) * props.hourHeight >= 22
-})
+const blockPx = computed(() => (visualDurationMin.value / 60) * props.hourHeight)
+const isSmall = computed(() => blockPx.value < 40)
+const titleFontSize = computed(() => isSmall.value ? '9px' : '10px')
 
 // ── Cursor / edge detection ────────────────────────────────────────────────────
 const nearEdge = ref(null) // 'top' | 'bottom' | null

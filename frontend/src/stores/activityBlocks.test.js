@@ -286,4 +286,23 @@ describe('activityBlocks store', () => {
       expect(store.blocks.some(b => b.id === tempId)).toBe(true)
     })
   })
+
+  // ══════════════════════════════════════════════════════════════
+  // gridStartHour
+  // ══════════════════════════════════════════════════════════════
+  describe('gridStartHour', () => {
+    it('heeft standaard 7 als begintijd', () => {
+      expect(store.gridStartHour).toBe(7)
+    })
+
+    it('setGridStartHour werkt de state bij', () => {
+      store.setGridStartHour(8)
+      expect(store.gridStartHour).toBe(8)
+    })
+
+    it('setGridStartHour slaat de waarde op in localStorage', () => {
+      store.setGridStartHour(9)
+      expect(localStorage.getItem('grid_start_hour')).toBe('9')
+    })
+  })
 })

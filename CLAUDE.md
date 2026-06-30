@@ -133,9 +133,9 @@ Key TODO:
 - **Zoeken op project bij bloktoewijzing.** In de `SlotSuggestion`-popup en `ProjectSelector`-modal een zoekbalk toevoegen waarmee de gebruiker kan filteren op projectnaam, nummer of alias. Zoekopdracht werkt client-side op de reeds geladen projectenlijst.
 - **"Nieuw project"-knop in toewijzingspopup.** Voeg onderaan de projectkeuzelijst in de `SlotSuggestion`-popup / `ProjectSelector`-modal een knop toe "＋ Nieuw project aanmaken". Klikken opent een inline formulier (naam, kleur, optioneel nummer) en slaat het direct op via `POST /api/projects/`. Het nieuwe project verschijnt direct in de keuzelijst en wordt geselecteerd.
 - ~~**BUG: Auto-toewijzen werkt niet na handmatig ontkoppelen.**~~ Opgelost: de `Exists`-subquery in de rule engine controleert nu of de meest recente `assigned_by='manual'` history-entry een niet-null project heeft. Een handmatige unassign (`project=null`) vrijgeeft het blok zodat de rule engine het opnieuw kan evalueren. De aggregator forceert null-snapshots ná de rule engine zodat sync de handmatige ontkoppeling respecteert.
-- **BUG: Tekst "tijdregistratie" valt buiten de zijbalk.** De label/koptekst "tijdregistratie" in de sidebar wordt afgekapt of valt buiten de zijbalkgrenzen. Onderzoek de CSS (overflow, breedte, wrapping) van de sidebar en zorg dat de tekst correct past.
+- **BUG (lage prio): Tekst "tijdregistratie" valt buiten de zijbalk.** De `<h1>` in de sidebar wordt visueel afgeknipt op dit systeem — oorzaak onduidelijk (geen repro met standaard Tailwind w-64/p-4). Eerdere CSS-pogingen (truncate, overflow-hidden, overflow-x-hidden op aside) losten het niet op zonder bijeffecten. Workaround: text-xs/text-sm of de tekst inkorten.
 - **Commentaar per weekstaat (samen oppakken met "Projectnummers, subnummers en activiteitennummers").** Voeg een vrij tekstveld toe bij elke weekstaat (per week) waaraan de gebruiker een notitie of opmerking kan koppelen, bijv. voor declaratietoelichting. Opslaan in de backend (nieuw model of veld op weekniveau).
-- **Dashboard: begintijd instellen, standaard 07:00.** De tijdlijn begint nu om 00:00, terwijl er vrijwel nooit voor 07:00 geboekt wordt. Maak de begintijd instelbaar (voorkeur: 07:00 als standaard) zodat de grid compacter en bruikbaarder wordt.
+- ~~**Dashboard: begintijd instellen, standaard 07:00.**~~ Geïmplementeerd: `gridStartHour` in de Pinia store (default 7, opgeslagen in localStorage). Grid, tijdlabels, uurlijnen, huidige-tijdlijn, drag-coördinaten en `ActivityBlock`-positie passen zich aan. Instelbaar via ⚙️ → "Begintijd tijdlijn" (keuze 00:00–12:00).
 - **Dashboard: tekst in kleine blokken (15/30 min) blijft zichtbaar.** Bij korte blokken valt de projectnaam weg. Toon de tekst altijd, maar pas het font aan de beschikbare ruimte aan: kleiner lettertype bij minder hoogte, of kapt de naam af met een ellipsis. Minimale leesbaarheid heeft prioriteit boven volledige naam.
 
 ---
@@ -167,7 +167,14 @@ Conclude with a summary: how many changes are qualitatively sound, how many need
 
 **If any findings are reported (missing tests or quality issues): do not commit. Present the findings and explicitly ask what to do with each issue before proceeding.**
 
-**Commit approval required:** After the quality check, always present the findings to the user and explicitly ask for approval before executing the commit. Never commit autonomously, even when all findings are sound.
+1. **Manual test scenarios** — after the quality and coverage assessments, always provide a concrete checklist of scenarios the user can manually verify in the running app. For each scenario:
+   - Describe the action to take in the UI or via curl/API
+   - State the expected outcome
+   - Note any edge cases or regressions to watch for
+
+   Keep scenarios short and actionable — they serve as a quick smoke test before the user approves the commit.
+
+**Commit approval required:** After the quality check and manual scenarios, always present the findings to the user and explicitly ask for approval before executing the commit. Never commit autonomously, even when all findings are sound.
 
 **Linter and IDE warnings:** When the IDE reports warnings (Sourcery, markdownlint, etc.) on files touched by a change, address them in the same commit if they are relevant to the changed code. Do not dismiss them as "pre-existing" without fixing them.
 

@@ -111,6 +111,7 @@ Backend is complete (models, importer, aggregator, rule engine, DRF API). Fronte
 
 Key TODO:
 
+- **[HOGE PRIORITEIT] BUG: Aantal minuten per kwartierblok onjuist berekend.** De top-drie activiteiten in een kwartierblok tellen soms maar op tot enkele minuten (bijv. 3 min) terwijl het blok een volledig kwartier beslaat. Mogelijk een afrondfout doordat de berekening op minuten i.p.v. seconden werkt. Waargenomen op 25 juni in `window_log_2026-06.txt`. Onderzoek de duur-berekening in `aggregator.py` (UniqueActivity/ActivityBlock duur-toekenning) en de frontend-weergave van `total_seconds`/top-drie activiteiten.
 - ~~**BUG: Activiteitsduur onjuist bij blok dat kwartiergrens overschrijdt.**~~ Opgelost in commit 652a1a6: `ActivityBlock.vue` gebruikt `visualDurationMin * 60` (gebaseerd op `ended_at`, altijd 15 min per aggregator-blok) in plaats van `totalSeconds` (per-slot overlap-seconden). Backend- en frontendtests toegevoegd die de correcte per-slot overlap bevestigen. Handmatig geverifieerd.
 - Stats view (Weekstaat en Projects zijn klaar)
 - ~~**Weekstaat: round to quarter-hours.**~~ Opgelost: matrix en weekTotaal gebruiken nu `blockWallClockSeconds` (ended_at − started_at) i.p.v. `total_seconds`, zodat aggregator-blokken altijd als volledige 15-min slots tellen.

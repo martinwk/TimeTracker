@@ -113,6 +113,17 @@ Key TODO:
 
 - ~~**BUG: Aantal minuten per kwartierblok onjuist berekend.**~~ Opgelost: de berekening in `aggregator.py` was correct (overlap in seconden). De oorzaak was tweeledig: (1) `formatDuration` toonde "0m" voor activiteiten onder een minuut — opgelost door exacte seconden te tonen voor <60s en te ronden naar minuten voor ≥60s; (2) de UI toonde geen onderscheid tussen actieve tijd en wandkloktijd — opgelost door een totaalregel "actief: Xm / 15m" toe te voegen aan de hover-tooltip en de SlotSuggestion-popup. `formatDuration` is nu gedeeld via `utils/date.js`.
 - ~~**BUG: Activiteitsduur onjuist bij blok dat kwartiergrens overschrijdt.**~~ Opgelost in commit 652a1a6: `ActivityBlock.vue` gebruikt `visualDurationMin * 60` (gebaseerd op `ended_at`, altijd 15 min per aggregator-blok) in plaats van `totalSeconds` (per-slot overlap-seconden). Backend- en frontendtests toegevoegd die de correcte per-slot overlap bevestigen. Handmatig geverifieerd.
+- **ONDERZOEK: Tijdoptelling per kwartierblok grondig verifiëren.** De gebruiker heeft twijfels of de weergegeven actieve tijd klopt. De `formatDuration`-fix maakte de cijfers leesbaarder, maar de onderliggende vraag — kloppen de seconden die de aggregator berekent? — is nog niet beantwoord via een volledig uitgewerkt voorbeeld.
+
+  **Aanpak:**
+  1. Kies 2-3 concrete kwartierslots uit `window_log_2026-06.txt` (bijv. 25 juni 08:15-08:30 en 08:30-08:45) waarvan de actieve tijd klein lijkt t.o.v. het slot.
+  2. Loop handmatig door **alle** log-regels binnen het slot — inclusief ruis (Idle, Program Manager, Task Switching, Desktop, Untitled). Noteer voor elke regel: `started_at`, `ended_at`, duur, is_noise.
+  3. Tel de overlap-seconden per titel op (conform de aggregator-formule: `min(ended_at, slot_end) - max(started_at, slot_start)`). Noteer ook de niet-gelogde gaten (seconden waarvoor geen enkele log-regel bestaat).
+  4. Vergelijk de handmatige som met de waarde van `ActivityBlock.total_seconds` in de database (`python manage.py shell` of de API) voor datzelfde slot.
+  5. Controleer of de gaten (computer slapend / AHK niet actief / scherm vergrendeld) de discrepantie volledig verklaren, of dat er een echte fout is in de aggregator.
+  6. Als er een fout is: schrijf een falende pytest die het specifieke geval dekt, repareer de aggregator, maak de test groen.
+  7. Documenteer in deze TODO wat de conclusie was (verwacht gedrag of echte bug).
+
 - Stats view (Weekstaat en Projects zijn klaar)
 - ~~**Weekstaat: round to quarter-hours.**~~ Opgelost: matrix en weekTotaal gebruiken nu `blockWallClockSeconds` (ended_at − started_at) i.p.v. `total_seconds`, zodat aggregator-blokken altijd als volledige 15-min slots tellen.
 - **Investigate: hours total mismatch.** A block that visually spans 1.5 h showed as 16 separate quarter-blocks in the Dashboard and reported 4 h in Weekstaat. Likely caused by stale/duplicate blocks from earlier frontend versions that sent temp-IDs to the assign endpoint (now fixed). Worth adding a management command that compares the sum of `total_seconds` within a contiguous assigned group against the group's wall-clock span, and flags groups where they diverge significantly.

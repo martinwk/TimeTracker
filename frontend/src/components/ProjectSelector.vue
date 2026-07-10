@@ -2,7 +2,7 @@
   <!-- Backdrop -->
   <div
     class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-    @click.self="emit('close')"
+    @click.self="handleClose"
   >
     <div class="bg-white rounded-2xl shadow-xl w-80 overflow-hidden">
 
@@ -13,7 +13,8 @@
           <p class="text-xs text-gray-400 mt-0.5">{{ selectedCount }} blok{{ selectedCount !== 1 ? 'ken' : '' }} geselecteerd</p>
         </div>
         <button
-          @click="emit('close')"
+          data-action="sluiten"
+          @click="handleClose"
           class="text-gray-400 hover:text-gray-600 transition-colors"
         >
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -22,19 +23,33 @@
         </button>
       </div>
 
+      <!-- Zoekbalk -->
+      <div class="px-5 pt-3 pb-1">
+        <input
+          ref="searchInput"
+          v-model="searchQuery"
+          type="text"
+          placeholder="Zoeken..."
+          class="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 placeholder-gray-300"
+        />
+      </div>
+
       <!-- Projecten lijst -->
       <ul class="py-2">
         <li
-          v-for="project in projects"
+          v-for="project in filteredProjects"
           :key="project.id"
+          class="project-item flex items-center gap-3 px-5 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
           @click="emit('assign', project.id)"
-          class="flex items-center gap-3 px-5 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
         >
           <span
             class="w-3 h-3 rounded-full shrink-0"
             :style="{ backgroundColor: project.color }"
           />
           <span class="text-sm text-gray-700 font-medium">{{ project.name }}</span>
+        </li>
+        <li v-if="filteredProjects.length === 0" class="px-5 py-3">
+          <p class="text-sm text-gray-400">Geen projecten gevonden</p>
         </li>
       </ul>
 
@@ -54,19 +69,37 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useActivityBlocksStore } from '@/stores/activityBlocks'
 
 const store = useActivityBlocksStore()
-const projects = computed(() => store.projects)
 const selectedCount = computed(() => store.selectedBlocks.length)
 
 const emit = defineEmits(['close', 'assign'])
 
+const searchQuery = ref('')
+const searchInput = ref(null)
+
+const handleClose = () => {
+  searchQuery.value = ''
+  emit('close')
+}
+
+const filteredProjects = computed(() => {
+  if (!searchQuery.value) return store.projects
+  const q = searchQuery.value.toLowerCase()
+  return store.projects.filter(p => p.name.toLowerCase().includes(q))
+})
+
 const onKeyDown = (e) => {
-  if (e.key === 'Escape') emit('close')
+  // Suppress shortcuts when the search field is focused
+  if (e.target === searchInput.value) return
+  if (e.key === 'Escape') handleClose()
   if (e.key === 'd' || e.key === 'Delete') emit('assign', null)
 }
-onMounted(() => document.addEventListener('keydown', onKeyDown))
+onMounted(() => {
+  document.addEventListener('keydown', onKeyDown)
+  nextTick(() => searchInput.value?.focus())
+})
 onUnmounted(() => document.removeEventListener('keydown', onKeyDown))
 </script>

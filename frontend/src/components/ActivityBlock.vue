@@ -40,6 +40,12 @@
       >
         {{ displayTitle }}
       </span>
+      <span
+        v-if="!isSmall && primaryBlock.comment"
+        class="comment-text text-[9px] text-gray-500 truncate leading-tight"
+      >
+        {{ primaryBlock.comment }}
+      </span>
       <div v-if="!isSmall" class="flex items-center justify-end gap-1">
         <span v-if="props.blocks && props.blocks.length > 1" class="text-[9px] text-gray-300">
           {{ props.blocks.length }}×

@@ -134,6 +134,8 @@
         :activities="suggestion.activities ?? []"
         :title="suggestion.title"
         :can-unassign="suggestion.canUnassign ?? false"
+        :block-ids="suggestion.blockIds ?? []"
+        :initial-comment="suggestion.initialComment ?? ''"
         @create="onCreateBlock"
         @close="closeSuggestion"
       />
@@ -417,14 +419,17 @@ const onMoveDragUp = () => {
     const activities = store.getTopActivitiesForIds(move.blockIds)
     const slotInfo   = { iso: move.origIso, hour: Math.floor(rangeStart / 60), minute: rangeStart % 60 }
     const isAssigned = move.projectId !== null
+    const firstBlock = store.blocks.find(b => b.id === move.blockIds[0])
     suggestion.value = {
       slotInfo,
       position,
-      isRange:     true,
+      isRange:        true,
       activities,
-      title:       isAssigned ? 'Opnieuw toewijzen' : 'Toewijzen aan project',
-      canUnassign: isAssigned,
-      cancelable:  false,  // clicking on existing block: don't delete on close
+      title:          isAssigned ? 'Opnieuw toewijzen' : 'Toewijzen aan project',
+      canUnassign:    isAssigned,
+      cancelable:     false,  // clicking on existing block: don't delete on close
+      blockIds:       move.blockIds,
+      initialComment: firstBlock?.comment ?? '',
     }
     return
   }

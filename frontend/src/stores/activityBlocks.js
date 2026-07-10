@@ -495,6 +495,7 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
               started_at:    block.started_at,
               total_seconds: block.total_seconds,
               project_id:    projectId,
+              comment:       block.comment ?? '',
             }).then(res => ({ tempId, data: res.data }))
           })
         )
@@ -507,6 +508,25 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
     } catch {
       await fetchWeekBlocks() // terug naar server-staat (rollback optimistische update)
       error.value = 'Fout bij toewijzen project'
+    }
+  }
+
+  // Slaat een commentaar op voor een of meer blokken. Werkt store.blocks
+  // optimistisch bij en stuurt alleen PATCH-requests voor echte (niet-temp) IDs.
+  const saveComment = async (blockIds, comment) => {
+    for (const id of blockIds) {
+      const block = blocks.value.find(b => b.id === id)
+      if (block) block.comment = comment
+    }
+
+    const realIds = blockIds.filter(id => id < 1e12)
+    try {
+      await Promise.all(
+        realIds.map(id => api.patch(`/activities/activity-blocks/${id}/`, { comment }))
+      )
+    } catch {
+      await fetchWeekBlocks() // terug naar server-staat (rollback optimistische update)
+      error.value = 'Fout bij opslaan notitie'
     }
   }
 
@@ -591,7 +611,7 @@ export const useActivityBlocksStore = defineStore('activityBlocks', () => {
     gridStartHour, setGridStartHour,
     toggleBlock, toggleMany, selectBlocks,
     selectAll, selectUnassigned, clearSelection, cancelSelection, selectOrCreateRange,
-    fetchWeekBlocks, fetchProjects, createBlock, assignToProject, applyRules,
+    fetchWeekBlocks, fetchProjects, createBlock, assignToProject, applyRules, saveComment,
     goToPrevWeek, goToNextWeek,
     resizeRange, moveBlocks, getTopActivities, getTopActivitiesForIds,
   }

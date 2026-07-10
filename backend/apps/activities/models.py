@@ -157,6 +157,11 @@ class ActivityBlock(models.Model):
         related_name="activity_blocks",
         help_text="Project waaraan dit blok is toegewezen (handmatig of automatisch via regel).",
     )
+    comment = models.TextField(
+        blank=True,
+        default='',
+        help_text="Optionele notitie of toelichting bij dit blok (bijv. taakomschrijving).",
+    )
 
     class Meta:
         ordering = ["started_at"]

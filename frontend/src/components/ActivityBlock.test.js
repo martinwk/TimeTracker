@@ -221,3 +221,45 @@ describe('ActivityBlock — weergave', () => {
     expect(wrapper.text()).toContain('2×')
   })
 })
+
+// ── Commentaar ────────────────────────────────────────────────────────────────
+describe('ActivityBlock — commentaar', () => {
+  it('toont commentaar als het blok groot genoeg is (≥ 40px) en comment niet leeg is', () => {
+    // 60 min, hourHeight=60 → 60px ≥ 40 → comment zichtbaar
+    const block = { ...makeBlock(9, 0, 60), comment: 'Intake-gesprek' }
+    const wrapper = mountBlock(block)
+    expect(wrapper.text()).toContain('Intake-gesprek')
+  })
+
+  it('toont geen commentaar als het blok leeg commentaar heeft', () => {
+    // 45 min, hourHeight=60 → 45px ≥ 40 → normaal blok; comment leeg → niet zichtbaar
+    const block = { ...makeBlock(9, 0, 45), comment: '' }
+    const wrapper = mountBlock(block)
+    // Alleen title + duur zichtbaar, geen extra tekst
+    const text = wrapper.text()
+    expect(text).toContain('Test blok')
+    expect(text).toContain('45m')
+    // Geen lege span met commentaar-klasse
+    expect(wrapper.find('.comment-text').exists()).toBe(false)
+  })
+
+  it('verbergt commentaar bij kleine blokken (< 40px)', () => {
+    // 30 min, hourHeight=60 → 30px < 40 → isSmall=true → comment verborgen
+    const block = { ...makeBlock(9, 0, 30), comment: 'Verborgen commentaar' }
+    const wrapper = mountBlock(block)
+    expect(wrapper.text()).not.toContain('Verborgen commentaar')
+  })
+
+  it('toont commentaar zonder project (ongeassigneerd blok)', () => {
+    const block = { ...makeBlock(9, 0, 60, null), comment: 'Ongeassigneerd met notitie' }
+    const wrapper = mountBlock(block)
+    expect(wrapper.text()).toContain('Ongeassigneerd met notitie')
+  })
+
+  it('toont commentaar op blok met project', () => {
+    const project = { id: 1, name: 'Alpha', color: '#6366f1' }
+    const block = { ...makeBlock(9, 0, 60, project), comment: 'Taakomschrijving' }
+    const wrapper = mountBlock(block)
+    expect(wrapper.text()).toContain('Taakomschrijving')
+  })
+})

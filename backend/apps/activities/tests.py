@@ -1002,7 +1002,7 @@ def test_bulk_upsert_duplicate_deleted_ids_counted_once(api_client, activity_blo
 ACTIVITY_BLOCK_READ_FIELDS = {
     "id", "app_name", "date", "started_at", "ended_at",
     "total_seconds", "total_minutes", "activity_count", "block_minutes",
-    "dominant_title", "project", "project_name", "suggested_projects",
+    "dominant_title", "comment", "project", "project_name", "suggested_projects",
     "unique_activities",
 }
 # project_id is write-only — mag niet in de response zitten
@@ -1200,3 +1200,74 @@ def test_sync_log_path_as_directory_auto_detects_file(api_client, tmp_path, sett
 
     assert response.status_code == 200
     assert response.data["imported"] >= 1
+
+
+# ── API: ActivityBlock — comment-veld ────────────────────────────────────────
+
+@pytest.mark.django_db
+def test_activity_block_comment_default_is_empty_string(api_client, activity_block):
+    """Bestaand blok zonder comment geeft een lege string terug — geen breaking change."""
+    response = api_client.get(f"/api/activities/activity-blocks/{activity_block.id}/")
+    assert response.status_code == 200
+    assert response.data["comment"] == ""
+
+
+@pytest.mark.django_db
+def test_create_block_with_comment(api_client):
+    """POST met comment slaat de notitie op en geeft hem terug in de response."""
+    response = api_client.post(
+        "/api/activities/activity-blocks/",
+        {
+            "started_at": "2026-03-13T09:00:00Z",
+            "total_seconds": 900,
+            "comment": "Intake-gesprek voorbereid",
+        },
+        format="json",
+    )
+    assert response.status_code == 201
+    assert response.data["comment"] == "Intake-gesprek voorbereid"
+    block = ActivityBlock.objects.get(pk=response.data["id"])
+    assert block.comment == "Intake-gesprek voorbereid"
+
+
+@pytest.mark.django_db
+def test_patch_block_updates_comment(api_client, activity_block):
+    """PATCH comment werkt de notitie bij op een bestaand blok."""
+    response = api_client.patch(
+        f"/api/activities/activity-blocks/{activity_block.id}/",
+        {"comment": "Factureerbare werkzaamheden"},
+        format="json",
+    )
+    assert response.status_code == 200
+    assert response.data["comment"] == "Factureerbare werkzaamheden"
+    activity_block.refresh_from_db()
+    assert activity_block.comment == "Factureerbare werkzaamheden"
+
+
+@pytest.mark.django_db
+def test_patch_block_clears_comment(api_client, activity_block):
+    """PATCH met lege string wist een bestaand commentaar."""
+    activity_block.comment = "Eerder commentaar"
+    activity_block.save(update_fields=["comment"])
+
+    response = api_client.patch(
+        f"/api/activities/activity-blocks/{activity_block.id}/",
+        {"comment": ""},
+        format="json",
+    )
+    assert response.status_code == 200
+    assert response.data["comment"] == ""
+    activity_block.refresh_from_db()
+    assert activity_block.comment == ""
+
+
+@pytest.mark.django_db
+def test_comment_in_get_response(api_client, activity_block):
+    """comment-veld is aanwezig in de GET-response van een blok."""
+    activity_block.comment = "Zichtbaar in GET"
+    activity_block.save(update_fields=["comment"])
+
+    response = api_client.get(f"/api/activities/activity-blocks/{activity_block.id}/")
+    assert response.status_code == 200
+    assert "comment" in response.data
+    assert response.data["comment"] == "Zichtbaar in GET"

@@ -54,6 +54,7 @@ class ActivityBlockSerializer(serializers.ModelSerializer):
             "activity_count",
             "block_minutes",
             "dominant_title",
+            "comment",
             "project",
             "project_id",
             "project_name",

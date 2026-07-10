@@ -628,5 +628,82 @@ describe('activityBlocks store — API', () => {
         expect.objectContaining({ project_id: 5 }),
       )
     })
+
+    it('stuurt een eerder opgeslagen commentaar mee bij het aanmaken van een temp-blok', async () => {
+      const tempId = Date.now() * 1000 + 540
+      store.blocks = [
+        { id: tempId, started_at: '2024-01-15T09:00:00Z', total_seconds: 900, dominant_title: 'X', project: null, comment: 'Notitie vóór toewijzing' },
+      ]
+      store.selectedBlocks = [tempId]
+      store.projects = [project]
+      api.post.mockResolvedValue({ data: { id: 77, started_at: '2024-01-15T09:00:00Z', total_seconds: 900, dominant_title: 'X', project, comment: 'Notitie vóór toewijzing' } })
+
+      await store.assignToProject(5)
+
+      expect(api.post).toHaveBeenCalledWith(
+        '/activities/activity-blocks/',
+        expect.objectContaining({ comment: 'Notitie vóór toewijzing' }),
+      )
+    })
+  })
+
+  // ── saveComment ────────────────────────────────────────────────────────────
+  describe('saveComment', () => {
+    it('stuurt PATCH naar /activity-blocks/{id}/ voor elk real-ID blok', async () => {
+      store.blocks = [
+        { id: 1, started_at: '2024-01-15T09:00:00Z', total_seconds: 900, dominant_title: 'X', project: null, comment: '' },
+        { id: 2, started_at: '2024-01-15T09:15:00Z', total_seconds: 900, dominant_title: 'Y', project: null, comment: '' },
+      ]
+      api.patch.mockResolvedValue({ data: {} })
+
+      await store.saveComment([1, 2], 'Intake-gesprek')
+
+      expect(api.patch).toHaveBeenCalledTimes(2)
+      expect(api.patch).toHaveBeenCalledWith('/activities/activity-blocks/1/', { comment: 'Intake-gesprek' })
+      expect(api.patch).toHaveBeenCalledWith('/activities/activity-blocks/2/', { comment: 'Intake-gesprek' })
+    })
+
+    it('werkt store.blocks optimistisch bij vóór de API-aanroep', async () => {
+      store.blocks = [
+        { id: 1, started_at: '2024-01-15T09:00:00Z', total_seconds: 900, dominant_title: 'X', project: null, comment: '' },
+      ]
+      let commentDuringCall = null
+      api.patch.mockImplementation(() => {
+        commentDuringCall = store.blocks[0].comment
+        return Promise.resolve({ data: {} })
+      })
+
+      await store.saveComment([1], 'Nieuwe notitie')
+
+      expect(commentDuringCall).toBe('Nieuwe notitie')
+      expect(store.blocks[0].comment).toBe('Nieuwe notitie')
+    })
+
+    it('slaat temp-ID blokken over bij PATCH (alleen real IDs)', async () => {
+      const tempId = Date.now() * 1000 + 1
+      store.blocks = [
+        { id: tempId, started_at: '2024-01-15T09:00:00Z', total_seconds: 900, dominant_title: 'X', project: null, comment: '' },
+      ]
+      api.patch.mockResolvedValue({ data: {} })
+
+      await store.saveComment([tempId], 'Notitie')
+
+      expect(api.patch).not.toHaveBeenCalled()
+      expect(store.blocks[0].comment).toBe('Notitie')
+    })
+
+    it('herlaadt blokken bij een API-fout en toont foutmelding', async () => {
+      store.blocks = [
+        { id: 1, started_at: '2024-01-15T09:00:00Z', total_seconds: 900, dominant_title: 'X', project: null, comment: '' },
+      ]
+      api.patch.mockRejectedValue(new Error('network error'))
+      // fetchWeekBlocks wordt ook aangeroepen bij rollback
+      api.get.mockResolvedValue({ data: { results: [] } })
+
+      await store.saveComment([1], 'Notitie die faalt')
+
+      expect(store.error).toBe('Fout bij opslaan notitie')
+      expect(api.get).toHaveBeenCalled()
+    })
   })
 })

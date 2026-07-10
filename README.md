@@ -79,7 +79,7 @@ pytest
 | Model | Doel |
 |---|---|
 | `WindowActivity` | Ruwe AHK-loginregel. Onveranderlijk na import. |
-| `ActivityBlock` | Geaggregeerd blok (opeenvolgende activiteiten, zelfde app). Optionele FK naar Project. |
+| `ActivityBlock` | Geaggregeerd blok (opeenvolgende activiteiten, zelfde app). Optionele FK naar Project, optioneel `comment`-veld. |
 | `UniqueActivity` | Unieke venstertitels binnen een blok, gesorteerd op duur. |
 | `ActivityRule` | Patroongebaseerde automatische toewijzing. Volgorde bepaald door prioriteit (lager = eerst). |
 | `Project` | Doelproject met kleur (hex) voor tijdlijnweergave. |
@@ -117,7 +117,7 @@ Beschikbare pagina's:
 - **Regels** — CRUD-beheer voor auto-assign regels (prioriteit, veld, waarde, project); knop "Regels toepassen" voor de huidige week
 - **Stats** — statistiekenpagina (in ontwikkeling)
 
-Klikken op een toegewezen blok toont een heroewijzings-popup; via "Koppeling verwijderen" wordt een aggregator-blok losgekoppeld (blijft zichtbaar als grijs blok). Handmatige ontkoppelingen overleven herberekening via `BlockProjectHistory`.
+Klikken op een toegewezen blok toont een heroewijzings-popup; via "Koppeling verwijderen" wordt een aggregator-blok losgekoppeld (blijft zichtbaar als grijs blok). Handmatige ontkoppelingen overleven herberekening via `BlockProjectHistory`. De popup heeft ook een zoekbalk (filtert projecten op naam) en een commentaarveld (`Enter` = opslaan en sluiten, `Shift+Enter` = nieuwe regel); het commentaar verschijnt op de grid zodra het blok groot genoeg is.
 
 De sync-knop (links onderin de sidebar) importeert het AHK-logbestand en herberekent alle betrokken dagen. Het tandwiel ernaast opent het instellingenpaneel met: logpadinstelling (opgeslagen in localStorage), bestandsimport via filepicker, en een knop "Regels opnieuw toepassen".
 

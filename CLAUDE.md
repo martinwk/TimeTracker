@@ -86,6 +86,12 @@ AHK window log (text file)
 
 **Hover tooltip toont activiteiten voor zowel ongeassigneerde als toegewezen blokken:** `onColumnMouseMove` in `ActivityBlockGrid` detecteert via `e.target.closest('.activity-block')` of de cursor over een interactief blok beweegt. Zo ja: lees `data-group-key` (= eerste block-ID van de merged group), zoek de groep op in `mergedBlocksByDay`, en toon `getTopActivitiesForIds(group.blocks.map(b => b.id))` — de cumulatieve activiteitenlijst over alle blokken in de groep. Zo nee: toon `getTopActivities` voor het 15-min slot (alleen ongeassigneerde aggregator-blokken).
 
+**Commentaar op blokken (geïmplementeerd):** `ActivityBlock.comment` (TextField, blank, default `''`) is bewerkbaar via een textarea in de `SlotSuggestion`-popup (verschijnt zodra de popup `blockIds` meekrijgt — dus alleen bij een klik op een bestaand blok, niet bij het aanmaken van een nieuw blok via drag-select). `Enter` (zonder Shift) slaat direct op via `store.saveComment(blockIds, comment)` en sluit de popup; `Shift+Enter` voegt een nieuwe regel toe. `saveComment` werkt `store.blocks` optimistisch bij, stuurt alleen een `PATCH` voor echte (niet-temp) IDs, en rolt terug (`fetchWeekBlocks()` + `error.value`) bij een API-fout — zelfde patroon als `assignToProject`. Een commentaar dat op een nog niet-gepersisteerd (temp-ID) blok wordt getypt, gaat niet verloren: de temp-ID-POST in `assignToProject` stuurt `block.comment` mee bij het aanmaken. Weergave op de grid: `ActivityBlock.vue` toont het commentaar onder de titel, alleen bij blokken ≥ 40px (dezelfde drempel als `isSmall`).
+
+**Zoeken op project (geïmplementeerd):** Zowel `SlotSuggestion` als `ProjectSelector` hebben een zoekbalk die client-side filtert op projectnaam (case-insensitief) via een `filteredProjects` computed. Zoekterm reset bij sluiten/heropenen van de popup.
+
+**Axios request-timeouts (geïmplementeerd):** De axios-client (`frontend/src/api/api.js`) heeft een default `timeout: 10000` (ms) zodat een onbereikbare backend snel een fout oplevert in plaats van 20-30s+ te hangen op de OS-level TCP-fout. Trage operaties (sync, bestandsimport, regels toepassen) gebruiken expliciet een langere timeout van 60s per request.
+
 ---
 
 ## Current state
@@ -105,7 +111,7 @@ Backend is complete (models, importer, aggregator, rule engine, DRF API). Fronte
 
 **Serializer:** `project` is a nested read-only object `{ id, name, color }`; write via `project_id` (write-only FK field).
 
-**Test coverage:** 166 backend tests (pytest), 300 frontend tests (Vitest).
+**Test coverage:** 171 backend tests (pytest), 331 frontend tests (Vitest).
 
 **Bulk endpoint — ID-onderscheid:** Temp-IDs (aangemaakt in de frontend met `Date.now() * 1000 + m`) zijn > 1e12. Echte backend-IDs zijn < 1e12. De frontend stuurt alleen echte IDs mee in `deleted_ids`.
 
@@ -127,9 +133,9 @@ Key TODO:
 - ~~**BUG: Verkleind blok laat vrijgekomen slot niet zien als unassigned.**~~ Opgelost: vrijgekomen aggregator-blokken worden nu ontkoppeld (project=null) en in de store gehouden in plaats van verwijderd, zodat ze direct als grijs unassigned blok verschijnen.
 - ~~**BUG: Ontkoppeld blok wordt na sync opnieuw toegewezen.**~~ Opgelost: unassign slaat een null-project `BlockProjectHistory`-record op (`assigned_by='manual'`); de aggregator herstelt dit na heraggregatie zodat de rule engine het blok overslaat. Tevens opgelost: de manual_snapshot query ordent nu ascending op `assigned_at` zodat een latere unassign altijd wint van een eerdere toewijzing.
 - ~~**Dashboard: gedeclareerde uren per dag zichtbaar.**~~ Geïmplementeerd: `declaredSecondsByDay` in de store telt wandkloktijd van toegewezen blokken per dag; zichtbaar in de dag-headers van het dashboard.
-- **Commentaar op toegewezen blok.** Voeg een optioneel tekstveld `comment` toe aan `ActivityBlock`. De gebruiker kan per blok een korte notitie invoeren (bijv. taakomschrijving of facturatienoot). Tonen in het toegewezen blok op de grid en bewerkbaar via de toewijzingspopup.
+- ~~**Commentaar op toegewezen blok.**~~ Geïmplementeerd: optioneel tekstveld `comment` op `ActivityBlock`, bewerkbaar via een textarea in de toewijzingspopup (`Enter` = opslaan + sluiten, `Shift+Enter` = nieuwe regel), zichtbaar op de grid bij blokken ≥ 40px.
 - **Projectnummers, subnummers en activiteitennummers (samen oppakken met "Commentaar per weekstaat").** Breid het `Project`-model uit met: `number` (bijv. `2024-042`), `sub_number` (optioneel), `activity_number` (optioneel), `title` (bestaand `name`-veld hernoemen of als alias bijhouden) en `alias` (korte alternatieve naam). Dit maakt het mogelijk om te declareren conform externe projectadministratie (bijv. urenregistratiesysteem van opdrachtgever).
-- **Zoeken op project bij bloktoewijzing.** In de `SlotSuggestion`-popup en `ProjectSelector`-modal een zoekbalk toevoegen waarmee de gebruiker kan filteren op projectnaam, nummer of alias. Zoekopdracht werkt client-side op de reeds geladen projectenlijst.
+- ~~**Zoeken op project bij bloktoewijzing.**~~ Geïmplementeerd: zoekbalk in zowel `SlotSuggestion` als `ProjectSelector`, filtert client-side op projectnaam (case-insensitief). Filteren op nummer/alias volgt zodra die velden bestaan (zie "Projectnummers, subnummers en activiteitennummers" hieronder).
 - **"Nieuw project"-knop in toewijzingspopup.** Voeg onderaan de projectkeuzelijst in de `SlotSuggestion`-popup / `ProjectSelector`-modal een knop toe "＋ Nieuw project aanmaken". Klikken opent een inline formulier (naam, kleur, optioneel nummer) en slaat het direct op via `POST /api/projects/`. Het nieuwe project verschijnt direct in de keuzelijst en wordt geselecteerd.
 - ~~**BUG: Auto-toewijzen werkt niet na handmatig ontkoppelen.**~~ Opgelost: de `Exists`-subquery in de rule engine controleert nu of de meest recente `assigned_by='manual'` history-entry een niet-null project heeft. Een handmatige unassign (`project=null`) vrijgeeft het blok zodat de rule engine het opnieuw kan evalueren. De aggregator forceert null-snapshots ná de rule engine zodat sync de handmatige ontkoppeling respecteert.
 - ~~**BUG (lage prio): Tekst "tijdregistratie" valt buiten de zijbalk.**~~ Opgelost: `<h1>` vervangen door `<div class="truncate">` in Sidebar.vue.

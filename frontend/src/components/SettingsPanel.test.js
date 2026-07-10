@@ -129,7 +129,10 @@ describe('SettingsPanel — bestand importeren', () => {
     expect(api.post).toHaveBeenCalledWith(
       '/activities/import/',
       expect.any(FormData),
-      expect.objectContaining({ headers: expect.objectContaining({ 'Content-Type': 'multipart/form-data' }) }),
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'Content-Type': 'multipart/form-data' }),
+        timeout: 60000,
+      }),
     )
   })
 })
@@ -159,10 +162,11 @@ describe('SettingsPanel — regels toepassen', () => {
     await wrapper.find('[data-testid="apply-rules-button"]').trigger('click')
     await flushPromises()
 
-    expect(api.post).toHaveBeenCalledWith('/activities/apply-rules/', {
-      date_from: '2026-06-16',
-      date_to: '2026-06-22',
-    })
+    expect(api.post).toHaveBeenCalledWith(
+      '/activities/apply-rules/',
+      { date_from: '2026-06-16', date_to: '2026-06-22' },
+      { timeout: 60000 },
+    )
   })
 
   it('toont succesbericht met aantal toegewezen blokken', async () => {

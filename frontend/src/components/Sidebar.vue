@@ -32,7 +32,8 @@ const sync = async () => {
   try {
     const logPath = localStorage.getItem('ahk_log_path')
     const body = logPath ? { log_path: logPath } : {}
-    const { data } = await api.post('/activities/sync/', body)
+    // Langere timeout: sync importeert een logbestand en herberekent alle betrokken dagen
+    const { data } = await api.post('/activities/sync/', body, { timeout: 60000 })
     syncResult.value = {
       blocksCreated: data.blocks_created,
       daysCount: data.days_aggregated.length,

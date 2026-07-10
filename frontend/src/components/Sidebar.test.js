@@ -38,7 +38,7 @@ describe('Sidebar — sync-knop', () => {
 
     await wrapper.find('[data-testid="sync-button"]').trigger('click')
 
-    expect(api.post).toHaveBeenCalledWith('/activities/sync/', {})
+    expect(api.post).toHaveBeenCalledWith('/activities/sync/', {}, { timeout: 60000 })
   })
 
   it('stuurt log_path mee als dat in localStorage staat', async () => {
@@ -48,7 +48,7 @@ describe('Sidebar — sync-knop', () => {
 
     await wrapper.find('[data-testid="sync-button"]').trigger('click')
 
-    expect(api.post).toHaveBeenCalledWith('/activities/sync/', { log_path: '/custom/log.txt' })
+    expect(api.post).toHaveBeenCalledWith('/activities/sync/', { log_path: '/custom/log.txt' }, { timeout: 60000 })
   })
 
   it('ververst de blokken na succesvolle sync', async () => {

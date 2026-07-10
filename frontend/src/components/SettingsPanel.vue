@@ -45,8 +45,10 @@ const onFileChange = async (e) => {
   try {
     const formData = new FormData()
     formData.append('files', file)
+    // Langere timeout: bestandsimport kan bij grote logbestanden even duren
     const { data } = await api.post('/activities/import/', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60000,
     })
     importResult.value = data.total_imported
     await store.fetchWeekBlocks()
@@ -76,7 +78,12 @@ const applyRules = async () => {
         return d.toISOString()
       })()
     )
-    const { data } = await api.post('/activities/apply-rules/', { date_from: dateFrom, date_to: dateTo })
+    // Langere timeout: regels herevalueren over een heel weekbereik kan even duren
+    const { data } = await api.post(
+      '/activities/apply-rules/',
+      { date_from: dateFrom, date_to: dateTo },
+      { timeout: 60000 },
+    )
     rulesResult.value = data.blocks_assigned
   } catch {
     rulesError.value = 'Fout bij toepassen van regels'

@@ -144,16 +144,16 @@
       <!-- Hover tooltip: activiteiten in een slot -->
       <div
         v-if="hoveredSlot && !suggestion"
-        class="absolute z-40 pointer-events-none bg-white/95 rounded-lg shadow-lg border border-gray-100 px-2.5 py-1.5 text-xs max-w-48"
+        class="absolute z-40 pointer-events-none bg-white/95 rounded-lg shadow-lg border border-gray-100 px-2.5 py-1.5 text-xs max-w-96"
         :style="hoverTooltipStyle"
       >
         <div
           v-for="act in hoveredSlot.activities"
           :key="act.title"
-          class="flex items-center gap-1.5 py-0.5"
+          class="flex items-start gap-1.5 py-0.5"
         >
-          <span class="w-1.5 h-1.5 rounded-full bg-blue-300 shrink-0" />
-          <span class="text-gray-600 truncate flex-1">{{ act.title }}</span>
+          <span class="w-1.5 h-1.5 rounded-full bg-blue-300 shrink-0 mt-1" />
+          <span class="text-gray-600 break-words flex-1">{{ act.title }}</span>
           <span class="text-gray-400 shrink-0">{{ formatDuration(act.seconds) }}</span>
         </div>
         <div class="flex justify-between items-center mt-1.5 pt-1 border-t border-gray-100 text-[10px] text-gray-300">
@@ -556,7 +556,7 @@ const hoverTooltipStyle = computed(() => {
   if (!hoveredSlot.value || !gridEl.value) return {}
   const rect = gridEl.value.getBoundingClientRect()
   const top  = hoveredSlot.value.y - rect.top + gridEl.value.scrollTop + 8
-  const left = Math.min(hoveredSlot.value.x - rect.left + 12, rect.width - 200)
+  const left = Math.min(hoveredSlot.value.x - rect.left + 12, rect.width - 384)
   return { top: top + 'px', left: left + 'px' }
 })
 

@@ -15,7 +15,11 @@
         class="flex items-center gap-1 py-0.5"
       >
         <span class="text-[11px] text-gray-600 truncate flex-1">{{ act.title }}</span>
-        <span class="text-[10px] text-gray-400 shrink-0">{{ formatSeconds(act.seconds) }}</span>
+        <span class="text-[10px] text-gray-400 shrink-0">{{ formatDuration(act.seconds) }}</span>
+      </div>
+      <div class="flex justify-between items-center mt-1.5 pt-1 border-t border-gray-100 text-[10px] text-gray-400">
+        <span>actief</span>
+        <span>{{ formatDuration(totalActiveSeconds) }} / {{ formatDuration(wallClockSeconds) }}</span>
       </div>
     </div>
 
@@ -119,15 +123,17 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useActivityBlocksStore } from '@/stores/activityBlocks'
+import { formatDuration } from '@/utils/date'
 
 const props = defineProps({
-  slotInfo:       { type: Object,  required: true },   // { iso, hour, minute }
-  position:       { type: Object,  required: true },   // { top, left }
-  activities:     { type: Array,   default: () => [] }, // [{ title, seconds }]
-  title:          { type: String,  default: 'Nieuw blok' },
-  canUnassign:    { type: Boolean, default: false },
-  blockIds:       { type: Array,   default: () => [] },
-  initialComment: { type: String,  default: '' },
+  slotInfo:         { type: Object,  required: true },   // { iso, hour, minute }
+  position:         { type: Object,  required: true },   // { top, left }
+  activities:       { type: Array,   default: () => [] }, // [{ title, seconds }]
+  title:            { type: String,  default: 'Nieuw blok' },
+  canUnassign:      { type: Boolean, default: false },
+  blockIds:         { type: Array,   default: () => [] },
+  initialComment:   { type: String,  default: '' },
+  wallClockSeconds: { type: Number,  default: 900 },
 })
 
 const emit = defineEmits(['create', 'close'])
@@ -178,13 +184,9 @@ const timeLabel = computed(() => {
   return `${h}:${m}`
 })
 
-const formatSeconds = (secs) => {
-  const m = Math.floor(secs / 60)
-  if (m < 60) return `${m}m`
-  const h   = Math.floor(m / 60)
-  const rem = m % 60
-  return rem > 0 ? `${h}u${rem}m` : `${h}u`
-}
+const totalActiveSeconds = computed(() =>
+  props.activities.reduce((s, a) => s + a.seconds, 0)
+)
 
 const filteredProjects = computed(() => {
   if (!searchQuery.value) return store.projects

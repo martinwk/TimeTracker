@@ -136,6 +136,7 @@
         :can-unassign="suggestion.canUnassign ?? false"
         :block-ids="suggestion.blockIds ?? []"
         :initial-comment="suggestion.initialComment ?? ''"
+        :wall-clock-seconds="suggestion.wallClockSeconds ?? 900"
         @create="onCreateBlock"
         @close="closeSuggestion"
       />
@@ -155,6 +156,10 @@
           <span class="text-gray-600 truncate flex-1">{{ act.title }}</span>
           <span class="text-gray-400 shrink-0">{{ formatDuration(act.seconds) }}</span>
         </div>
+        <div class="flex justify-between items-center mt-1.5 pt-1 border-t border-gray-100 text-[10px] text-gray-300">
+          <span>actief</span>
+          <span>{{ formatDuration(hoveredSlotTotal) }} / {{ formatDuration(hoveredSlot.wallClockSeconds) }}</span>
+        </div>
       </div>
     </div>
   </div>
@@ -163,7 +168,7 @@
 <script setup>
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useActivityBlocksStore } from '@/stores/activityBlocks'
-import { parseLocalDate, toLocalDateStr } from '@/utils/date'
+import { parseLocalDate, toLocalDateStr, formatDuration } from '@/utils/date'
 import ActivityBlock from '@/components/ActivityBlock.vue'
 import SlotSuggestion from '@/components/SlotSuggestion.vue'
 
@@ -220,13 +225,9 @@ const snap   = (min) => Math.round(min / 15) * 15
 const clamp  = (min) => Math.max(startMin.value, Math.min(min, 24 * 60 - 15))
 const yToMin = (y)   => Math.floor(y / hourHeight * 60 / 15) * 15 + startMin.value
 
-const formatDuration = (seconds) => {
-  const m = Math.floor(seconds / 60)
-  if (m < 60) return `${m}m`
-  const h   = Math.floor(m / 60)
-  const rem = m % 60
-  return rem > 0 ? `${h}u${rem}m` : `${h}u`
-}
+const hoveredSlotTotal = computed(() =>
+  hoveredSlot.value?.activities.reduce((s, a) => s + a.seconds, 0) ?? 0
+)
 
 // Stijl voor achtergrond-indicator van een aggregator-blok (altijd 15-min hoogte)
 const indicatorStyle = (block) => {
@@ -317,7 +318,7 @@ const onSelDragUp = (e) => {
   // onderliggende blokken via selectOrCreateRange en gebruik assignToProject.
   if (wasDrag || activities.length > 0) {
     store.selectOrCreateRange(iso, rangeStart, rangeEnd)
-    suggestion.value = { slotInfo, position, isRange: true, activities, cancelable: true }
+    suggestion.value = { slotInfo, position, isRange: true, activities, cancelable: true, wallClockSeconds: (rangeEnd - rangeStart) * 60 }
   } else {
     // Leeg slot zonder activiteit: maak een nieuw blok aan via createBlock
     suggestion.value = { slotInfo, position, isRange: false, activities, cancelable: false }
@@ -423,13 +424,14 @@ const onMoveDragUp = () => {
     suggestion.value = {
       slotInfo,
       position,
-      isRange:        true,
+      isRange:          true,
       activities,
-      title:          isAssigned ? 'Opnieuw toewijzen' : 'Toewijzen aan project',
-      canUnassign:    isAssigned,
-      cancelable:     false,  // clicking on existing block: don't delete on close
-      blockIds:       move.blockIds,
-      initialComment: firstBlock?.comment ?? '',
+      title:            isAssigned ? 'Opnieuw toewijzen' : 'Toewijzen aan project',
+      canUnassign:      isAssigned,
+      cancelable:       false,  // clicking on existing block: don't delete on close
+      blockIds:         move.blockIds,
+      initialComment:   firstBlock?.comment ?? '',
+      wallClockSeconds: move.blockIds.length * 900,
     }
     return
   }
@@ -569,8 +571,9 @@ const onColumnMouseMove = (e, iso) => {
     const groupKey = parseInt(actEl.dataset.groupKey)
     const group = (mergedBlocksByDay.value[iso] ?? []).find(g => g.blocks[0].id === groupKey)
     const activities = group ? store.getTopActivitiesForIds(group.blocks.map(b => b.id)) : []
+    const wallClockSeconds = group ? group.blocks.length * 900 : 900
     hoveredSlot.value = activities.length > 0
-      ? { activities, x: e.clientX, y: e.clientY }
+      ? { activities, wallClockSeconds, x: e.clientX, y: e.clientY }
       : null
     return
   }
@@ -580,7 +583,7 @@ const onColumnMouseMove = (e, iso) => {
   const slotMin = Math.floor(rawMin / 15) * 15
   const activities = store.getTopActivities(iso, slotMin, slotMin + 15)
   hoveredSlot.value = activities.length > 0
-    ? { activities, x: e.clientX, y: e.clientY }
+    ? { activities, wallClockSeconds: 900, x: e.clientX, y: e.clientY }
     : null
 }
 

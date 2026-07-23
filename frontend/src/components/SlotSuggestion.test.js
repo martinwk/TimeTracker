@@ -217,3 +217,54 @@ describe('SlotSuggestion — commentaar', () => {
     expect(store.blocks[0].comment).toBe('Bestaande notitie')
   })
 })
+
+describe('SlotSuggestion — activiteiten weergave', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('toont seconden voor activiteiten onder een minuut', () => {
+    const wrapper = mount(SlotSuggestion, {
+      props: {
+        ...defaultProps,
+        activities: [{ title: 'VS Code', seconds: 45 }],
+      },
+    })
+    expect(wrapper.text()).toContain('45s')
+    expect(wrapper.text()).not.toContain('0m')
+  })
+
+  it('toont minuten voor activiteiten van een minuut en meer', () => {
+    const wrapper = mount(SlotSuggestion, {
+      props: {
+        ...defaultProps,
+        activities: [{ title: 'VS Code', seconds: 120 }],
+      },
+    })
+    expect(wrapper.text()).toContain('2m')
+  })
+
+  it('toont de totale actieve tijd en wandkloktijd onder de lijst', () => {
+    const wrapper = mount(SlotSuggestion, {
+      props: {
+        ...defaultProps,
+        activities: [
+          { title: 'VS Code', seconds: 500 },
+          { title: 'Firefox', seconds: 100 },
+        ],
+        wallClockSeconds: 900,
+      },
+    })
+    // totaal actief = 600 sec → 10m; wandkloktijd = 15m
+    expect(wrapper.text()).toContain('10m')
+    expect(wrapper.text()).toContain('15m')
+    expect(wrapper.text()).toContain('actief')
+  })
+
+  it('toont geen totaalregel als er geen activiteiten zijn', () => {
+    const wrapper = mount(SlotSuggestion, {
+      props: { ...defaultProps, activities: [] },
+    })
+    expect(wrapper.text()).not.toContain('actief')
+  })
+})

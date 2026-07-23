@@ -14,6 +14,15 @@ export const toLocalDateStr = (dateStr) => {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
 
+export const formatDuration = (seconds) => {
+  if (seconds < 60) return `${seconds}s`
+  const m = Math.round(seconds / 60)
+  if (m < 60) return `${m}m`
+  const h   = Math.floor(m / 60)
+  const rem = m % 60
+  return rem > 0 ? `${h}u${rem}m` : `${h}u`
+}
+
 export const getWeekNumber = (date) => {
   const d = new Date(date)
   d.setHours(0, 0, 0, 0)

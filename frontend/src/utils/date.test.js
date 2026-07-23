@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseLocalDate, makeLocalISO, toLocalDateStr, getWeekNumber } from './date'
+import { parseLocalDate, makeLocalISO, toLocalDateStr, getWeekNumber, formatDuration } from './date'
 
 describe('parseLocalDate', () => {
   it('parses a date-only string as local midnight', () => {
@@ -61,5 +61,30 @@ describe('getWeekNumber', () => {
 
   it('accepts a Date object', () => {
     expect(typeof getWeekNumber(new Date('2024-06-10'))).toBe('number')
+  })
+})
+
+describe('formatDuration', () => {
+  it('toont seconden voor waarden onder een minuut', () => {
+    expect(formatDuration(0)).toBe('0s')
+    expect(formatDuration(1)).toBe('1s')
+    expect(formatDuration(45)).toBe('45s')
+    expect(formatDuration(59)).toBe('59s')
+  })
+
+  it('rondt af naar minuten voor 60 seconden en meer', () => {
+    expect(formatDuration(60)).toBe('1m')
+    expect(formatDuration(89)).toBe('1m')
+    expect(formatDuration(90)).toBe('2m')
+    expect(formatDuration(120)).toBe('2m')
+    expect(formatDuration(870)).toBe('15m')
+    expect(formatDuration(900)).toBe('15m')
+  })
+
+  it('toont uren voor waarden van een uur en meer', () => {
+    expect(formatDuration(3600)).toBe('1u')
+    expect(formatDuration(3660)).toBe('1u1m')
+    expect(formatDuration(5400)).toBe('1u30m')
+    expect(formatDuration(7200)).toBe('2u')
   })
 })
